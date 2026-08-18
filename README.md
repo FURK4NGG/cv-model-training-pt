@@ -9,7 +9,48 @@ En basta ana bir main klasorun ve icinde bir data.yaml dosyan olsun.Icinde kulla
 
 Dikkat edecegin sey ana data.yaml dosyandaki class adin ile ekleyecegin class datasinin data.yaml'daki adi ayni olmali  
 
-En iyi dataset icinde yeterli ve 80 10 10 oranina yakin bir train/test/val degilimina sahip, ardi ardina cekilmis olmayan goruntulerden olusan bir datasettir
+En iyi dataset icinde yeterli ve 80 10 10 oranina yakin bir train/test/val degilimina sahip, ardi ardina cekilmis olmayan goruntulerden olusan bir datasettir  
+
+
+<details>
+<summary>Veri yayma yolu:</summary>
+
+TRAIN
+Şunların çoğu train içinde olmalı:
+
+Farklı ayı türleri ve görünümleri
+Gece, gündüz ve IR görüntüleri
+Yakın, uzak, küçük ve büyük ayılar
+Kısmen ağaç arkasında kalan hayvanlar
+Farklı mevsimler ve hava koşulları
+Farklı kamera açıları
+Boş orman gibi negatif görüntüler
+
+Örneğin 3.000 ayı görüntüsünün yaklaşık 2.400’ü train içine konur.
+
+VAL
+Model val görüntülerinden öğrenmez. Her eğitim turundan sonra bunlarda ölçüm yapılır.
+
+val, şu kararları etkiler:
+
+En iyi checkpoint’in seçilmesi
+Early stopping
+Precision, recall ve mAP ölçümleri
+Modelin ezberlemeye başlayıp başlamadığının görülmesi
+Confidence threshold gibi ayarların belirlenmesi
+
+3.000 görüntüde yaklaşık 300 görüntü val içine konur.
+
+val içinde de mutlaka ayı bulunmalıdır. Ancak bunlar train içindeki ayı görüntülerinin kopyaları veya komşu video kareleri olmamalıdır.
+
+TEST
+test, model tamamen bittikten sonra yalnızca son değerlendirme için kullanılır.
+
+Test sonucuna bakarak sürekli eğitim ayarı değiştirirsen test artık tarafsız olmaz ve pratikte ikinci bir val setine dönüşür.
+
+3.000 görüntüde yaklaşık 300 görüntü test içine konur.
+</details>
+
 
 WINDOWS
 py -m pip install questionary PyYAML
@@ -63,44 +104,7 @@ bear/
 │   └── labels/
 └── data.yaml
 
-<details>
-<summary>Veri yayma yolu:</summary>
 
-TRAIN
-Şunların çoğu train içinde olmalı:
-
-Farklı ayı türleri ve görünümleri
-Gece, gündüz ve IR görüntüleri
-Yakın, uzak, küçük ve büyük ayılar
-Kısmen ağaç arkasında kalan hayvanlar
-Farklı mevsimler ve hava koşulları
-Farklı kamera açıları
-Boş orman gibi negatif görüntüler
-
-Örneğin 3.000 ayı görüntüsünün yaklaşık 2.400’ü train içine konur.
-
-VAL
-Model val görüntülerinden öğrenmez. Her eğitim turundan sonra bunlarda ölçüm yapılır.
-
-val, şu kararları etkiler:
-
-En iyi checkpoint’in seçilmesi
-Early stopping
-Precision, recall ve mAP ölçümleri
-Modelin ezberlemeye başlayıp başlamadığının görülmesi
-Confidence threshold gibi ayarların belirlenmesi
-
-3.000 görüntüde yaklaşık 300 görüntü val içine konur.
-
-val içinde de mutlaka ayı bulunmalıdır. Ancak bunlar train içindeki ayı görüntülerinin kopyaları veya komşu video kareleri olmamalıdır.
-
-TEST
-test, model tamamen bittikten sonra yalnızca son değerlendirme için kullanılır.
-
-Test sonucuna bakarak sürekli eğitim ayarı değiştirirsen test artık tarafsız olmaz ve pratikte ikinci bir val setine dönüşür.
-
-3.000 görüntüde yaklaşık 300 görüntü test içine konur.
-</details>
 
 
 
