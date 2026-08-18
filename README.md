@@ -13,7 +13,8 @@ WINDOWS
 py -m pip install questionary PyYAML
 py merge_yolo_datasets.py
 
-LINUX
+<details>
+<summary>Linux Packages</summary>
 <details>
   <summary>Arch Packages</summary>
    Python  
@@ -32,7 +33,7 @@ LINUX
    Python  
    sudo dnf install python3 python3-pip
    </details>
-
+</details>
    
 
 
