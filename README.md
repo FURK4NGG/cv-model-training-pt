@@ -9,7 +9,42 @@ En basta ana bir main klasorun ve icinde bir data.yaml dosyan olsun.Icinde kulla
 
 Dikkat edecegin sey ana data.yaml dosyandaki class adin ile ekleyecegin class datasinin data.yaml'daki adi ayni olmali  
 
+WINDOWS
+py -m pip install questionary PyYAML
+py merge_yolo_datasets.py
 
+LINUX
+<details>
+  <summary>Arch Packages</summary>
+   Python  
+   sudo pacman -S python
+   </details>
+
+<details>
+  <summary>Debian/Ubuntu Packages</summary>
+   Python  
+   sudo apt update
+   sudo apt install python3 python3-venv python3-pip
+   </details>
+
+<details>
+  <summary>Fedora Packages</summary>
+   Python  
+   sudo dnf install python3 python3-pip
+   </details>
+
+   
+
+
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install questionary PyYAML
+python3 merge_yolo_datasets.py
+
+AFTER FIRST RUN
+source .venv/bin/activate
+python3 merge_yolo_datasets.py
 
 Kod, çalıştırıldığı dizindeki dataset klasörlerini otomatik bulur. Beklenen yapı:
 
@@ -31,11 +66,13 @@ bear/
 Eksik train, valid, test, images ve labels klasörlerini gerektiğinde oluşturur.
 
 Ana menü
-(1) Class'ları filtrele/azalt
-(2) Datasetleri ana dataset içine birleştir
-(3) Train/valid/test oranlarıyla yeniden bölüştür
-(4) Datasetleri yalnızca kontrol et
-(0) Çıkış
+1 → Gerekli class’ları filtrele
+2 → Datasetleri ana dataset içinde birleştir
+3 → Ana dataseti 80/10/10 yeniden bölüştür(coklu class i sececeksin)
+5 → Ana dataseti kontrol et
+4 → ZIP’e uygun klasör düzenine çevir
+6 → ZIP oluştur
+
 1. Class filtreleme
 
 Bir veya birden fazla class seçebilirsin.
