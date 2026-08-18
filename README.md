@@ -64,6 +64,7 @@ bear/
 <details>
 <summary>Veri yayma yolu:</summary>
 
+TRAIN
 Şunların çoğu train içinde olmalı:
 
 Farklı ayı türleri ve görünümleri
@@ -76,6 +77,7 @@ Boş orman gibi negatif görüntüler
 
 Örneğin 3.000 ayı görüntüsünün yaklaşık 2.400’ü train içine konur.
 
+VAL
 Model val görüntülerinden öğrenmez. Her eğitim turundan sonra bunlarda ölçüm yapılır.
 
 val, şu kararları etkiler:
@@ -90,8 +92,7 @@ Confidence threshold gibi ayarların belirlenmesi
 
 val içinde de mutlaka ayı bulunmalıdır. Ancak bunlar train içindeki ayı görüntülerinin kopyaları veya komşu video kareleri olmamalıdır.
 
-Test
-
+TEST
 test, model tamamen bittikten sonra yalnızca son değerlendirme için kullanılır.
 
 Test sonucuna bakarak sürekli eğitim ayarı değiştirirsen test artık tarafsız olmaz ve pratikte ikinci bir val setine dönüşür.
