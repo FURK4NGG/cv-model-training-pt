@@ -9,6 +9,8 @@ En basta ana bir main klasorun ve icinde bir data.yaml dosyan olsun.Icinde kulla
 
 Dikkat edecegin sey ana data.yaml dosyandaki class adin ile ekleyecegin class datasinin data.yaml'daki adi ayni olmali  
 
+En iyi dataset icinde yeterli ve 80 10 10 oranina yakin bir train/test/val degilimina sahip, ardi ardina cekilmis olmayan goruntulerden olusan bir datasettir
+
 WINDOWS
 py -m pip install questionary PyYAML
 py merge_yolo_datasets.py
