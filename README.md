@@ -61,6 +61,46 @@ bear/
 │   └── labels/
 └── data.yaml
 
+<details>
+<summary>Veri yayma yolu:</summary>
+
+Şunların çoğu train içinde olmalı:
+
+Farklı ayı türleri ve görünümleri
+Gece, gündüz ve IR görüntüleri
+Yakın, uzak, küçük ve büyük ayılar
+Kısmen ağaç arkasında kalan hayvanlar
+Farklı mevsimler ve hava koşulları
+Farklı kamera açıları
+Boş orman gibi negatif görüntüler
+
+Örneğin 3.000 ayı görüntüsünün yaklaşık 2.400’ü train içine konur.
+
+Model val görüntülerinden öğrenmez. Her eğitim turundan sonra bunlarda ölçüm yapılır.
+
+val, şu kararları etkiler:
+
+En iyi checkpoint’in seçilmesi
+Early stopping
+Precision, recall ve mAP ölçümleri
+Modelin ezberlemeye başlayıp başlamadığının görülmesi
+Confidence threshold gibi ayarların belirlenmesi
+
+3.000 görüntüde yaklaşık 300 görüntü val içine konur.
+
+val içinde de mutlaka ayı bulunmalıdır. Ancak bunlar train içindeki ayı görüntülerinin kopyaları veya komşu video kareleri olmamalıdır.
+
+Test
+
+test, model tamamen bittikten sonra yalnızca son değerlendirme için kullanılır.
+
+Test sonucuna bakarak sürekli eğitim ayarı değiştirirsen test artık tarafsız olmaz ve pratikte ikinci bir val setine dönüşür.
+
+3.000 görüntüde yaklaşık 300 görüntü test içine konur.
+</details>
+
+
+
 Eksik train, valid, test, images ve labels klasörlerini gerektiğinde oluşturur.
 
 Ana menü
