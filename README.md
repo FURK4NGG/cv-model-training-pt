@@ -17,21 +17,18 @@ py merge_yolo_datasets.py
 <summary>Linux Packages</summary>
 <details>
   <summary>Arch Packages</summary>
-   Python  
-   sudo pacman -S python
+   sudo pacman -S python xdg-utils
    </details>
 
 <details>
   <summary>Debian/Ubuntu Packages</summary>
-   Python  
    sudo apt update
-   sudo apt install python3 python3-venv python3-pip
+   sudo apt install python3 python3-venv python3-pip xdg-utils
    </details>
 
 <details>
   <summary>Fedora Packages</summary>
-   Python  
-   sudo dnf install python3 python3-pip
+   sudo dnf install python3 python3-pip xdg-utils
    </details>
 </details>
    
