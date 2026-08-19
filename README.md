@@ -49,6 +49,11 @@ test, model tamamen bittikten sonra yalnızca son değerlendirme için kullanıl
 Test sonucuna bakarak sürekli eğitim ayarı değiştirirsen test artık tarafsız olmaz ve pratikte ikinci bir val setine dönüşür.
 
 3.000 görüntüde yaklaşık 300 görüntü test içine konur.
+
+NEGATIF GORUNTULER(modelde kullanilan classlar harici olan arkaplandir orman sokak cadde gibi)
+Minimum:  %10
+Önerilen: %20
+Üst sınır: %25–30
 </details>
 
 
