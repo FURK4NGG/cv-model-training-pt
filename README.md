@@ -2,7 +2,51 @@
 <!-- ne kadar fotograf olmali, dosyalar nerede olmali zip icerisinde , zip i atma, ipynb deki bagimliliklari kendinden cek  vs  -->
 
 ## 👀 cv-model-training-pt Overview  1/3  
-<h1 align="center">Computer Vision AI model training for rasberry pi 5</h1>  
+<h1 align="center">Computer Vision AI model training for rasberry pi 5 and interactive command-line application for filtering, merging, splitting, validating, reorganizing, and packaging YOLO datasets</h1>  
+
+
+## 🚀 Features
+- [x] Create empty YOLO label files for background and negative images
+- [x] Filter datasets using one or multiple selected classes
+- [x] Keep selected classes or process all unselected classes
+- [x] Copy filtered image-label pairs into a separate dataset
+- [x] Delete selected image-label pairs after explicit confirmation
+- [x] Limit the number of images separately for each class
+- [x] Preserve the existing train, val, and test distribution during filtering
+- [x] Choose whether images containing unselected objects are allowed
+- [x] Automatically remove unwanted bounding boxes from copied labels
+- [x] Merge multiple classes into a single class
+- [x] Convert all label class IDs to a user-selected class
+- [x] Automatically detect and display classes from data.yaml
+- [x] Reindex remaining class IDs starting from 0
+- [x] Automatically update data.yaml after class changes
+- [x] Merge multiple YOLO datasets into one main dataset
+- [x] Match classes automatically by their names in data.yaml
+- [x] Remap source class IDs to the correct destination IDs
+- [x] Preserve existing destination classes while adding new classes
+- [x] Prevent class ID conflicts that could corrupt labels
+- [x] Rename image-label pairs together when filenames conflict
+- [x] Redistribute datasets using customizable train, val, and test percentages
+- [x] Use an 80/10/10 train, val, and test split by default
+- [x] Support datasets containing either single or multiple classes
+- [x] Approximately preserve class distribution in multi-class datasets
+- [x] Prioritize images containing rare classes during dataset splitting
+- [x] Preserve empty labels used for negative images
+- [x] Detect missing image-label pairs and offer repair options
+- [x] Detect orphan label files that do not have matching images
+- [x] Convert datasets to the images/split + labels/split directory structure
+- [x] Support legacy valid directories and convert them to val
+- [x] Validate YOLO detection and segmentation/polygon labels
+- [x] Validate class IDs, coordinates, image-label counts, and duplicate filenames
+- [x] Report image, label, bounding-box, negative-image, and per-class statistics
+- [x] Automatically back up labels and data.yaml before modifying datasets
+- [x] Display progress information during long-running operations
+- [x] Browse and select directories across different disks and locations
+- [x] Use the same interactive directory browser for every source and destination selection
+- [x] Create ZIP archives containing only data.yaml, images, and labels
+- [x] Preserve empty split directories inside generated ZIP archives
+- [x] Verify ZIP integrity after archive creation
+- [x] Windows and Linux support
 
 
 En basta ana bir main klasorun ve icinde bir data.yaml dosyan olsun.Icinde kullanacagin tum classlarin idleri dursun.Cunku classlari aktarirken ana data.yaml icinde yazan class id'sine gore yeni eklenen datalarin labellarinin ilk karakteri degistirilerek eklenir.  
