@@ -50,11 +50,45 @@
 - [x] Windows and Linux support
 
 
-En basta ana bir main klasorun ve icinde bir data.yaml dosyan olsun.Icinde kullanacagin tum classlarin idleri dursun.Cunku classlari aktarirken ana data.yaml icinde yazan class id'sine gore yeni eklenen datalarin labellarinin ilk karakteri degistirilerek eklenir.  
+## 💡 Recommendations and Important Notes
 
-Dikkat edecegin sey ana data.yaml dosyandaki class adin ile ekleyecegin class datasinin data.yaml'daki adi ayni olmali  
+Start with a main dataset directory containing a `data.yaml` file. This file should define the IDs and names of every class you plan to use.
 
-En iyi dataset icinde yeterli ve 80 10 10 oranina yakin bir train/test/val degilimina sahip, ardi ardina cekilmis olmayan goruntulerden olusan bir datasettir  
+When new datasets are merged into the main dataset, the `class_id` at the beginning of each copied label row is automatically remapped to the corresponding class ID defined in the main `data.yaml`.
+
+Make sure that the class name in the source dataset’s `data.yaml` exactly matches the corresponding class name in the main dataset’s `data.yaml`. Otherwise, the program may interpret them as different classes.
+
+For example:
+
+```yaml
+# Main dataset
+names:
+  0: bear
+  1: boar
+  2: deer
+```
+
+```yaml
+# Source dataset
+names:
+  0: bear
+```
+
+When the source dataset is merged, its `bear` labels remain mapped to class ID `0`. If `bear` had a different ID in the source dataset, the copied label files would be remapped automatically.
+
+A high-quality dataset should:
+
+* Contain enough images for every class.
+* Have a train/validation/test distribution close to `80/10/10`.
+* Include different environments, lighting conditions, distances, angles, and object appearances.
+* Avoid consecutive or nearly identical frames captured from the same video or camera-trap event.
+* Keep images from the same event in the same split to prevent data leakage.
+* Represent every important class in train, validation, and test whenever enough examples are available.
+* Keep images from the same event in the same split to prevent data leakage.
+    For example, do not place some of 20 consecutive images from the same camera-trap recording in train and others in val or test. All images from that event should remain in the same split. Otherwise, the model may encounter almost identical scenes during training and testing, producing misleadingly high evaluation results.
+
+* Whenever enough examples are available, include every important class in train, validation, and test.
+    For example, the bear class should not exist only in train. To properly measure whether the model can detect bears, val and test should also contain different bear images.
 
 
 ## Train, Validation, and Test Distribution
