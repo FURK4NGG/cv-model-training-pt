@@ -130,14 +130,9 @@ py -m pip install questionary PyYAML
 Run the program:
 
 ```powershell
-py "merge_yolo_datasets(1).py"
+py "merge_yolo_datasets.py"
 ```
 
-If your file is named `merge_yolo_datasets.py`, use:
-
-```powershell
-py merge_yolo_datasets.py
-```
 
 The program asks you to select Windows or Linux mode when it starts.
 
@@ -180,13 +175,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install questionary PyYAML
-python3 "merge_yolo_datasets(1).py"
-```
-
-If your file is named `merge_yolo_datasets.py`, run:
-
-```bash
-python3 merge_yolo_datasets.py
+python3 "merge_yolo_datasets.py"
 ```
 
 ### After the First Run
@@ -195,8 +184,13 @@ Activate the existing virtual environment and start the program:
 
 ```bash
 source .venv/bin/activate
-python3 "merge_yolo_datasets(1).py"
+python3 "merge_yolo_datasets.py"
 ```
+
+
+## 🔎 ALL APP FEATURES
+<details>
+<summary>For Nerds</summary>
 
 ## Automatic Dataset Discovery
 
@@ -921,3 +915,4 @@ The program's folder selection, path creation, dataset processing, and image-ope
 On Linux, opening an image externally requires `xdg-open`, provided by the `xdg-utils` package.
 
 On Windows, the default system image viewer is used.
+</details>
