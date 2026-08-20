@@ -152,7 +152,7 @@ These percentages are not universal rules. The correct ratio depends on the real
 
 </details>
 
-## Installation
+## 📦 Installation
 
 ### Windows
 
