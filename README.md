@@ -56,852 +56,868 @@ Dikkat edecegin sey ana data.yaml dosyandaki class adin ile ekleyecegin class da
 En iyi dataset icinde yeterli ve 80 10 10 oranina yakin bir train/test/val degilimina sahip, ardi ardina cekilmis olmayan goruntulerden olusan bir datasettir  
 
 
+## Train, Validation, and Test Distribution
+
 <details>
-<summary>Veri yayma yolu:</summary>
+<summary>How should the data be distributed?</summary>
 
-TRAIN
-Şunların çoğu train içinde olmalı:
+### TRAIN
 
-Farklı ayı türleri ve görünümleri
-Gece, gündüz ve IR görüntüleri
-Yakın, uzak, küçük ve büyük ayılar
-Kısmen ağaç arkasında kalan hayvanlar
-Farklı mevsimler ve hava koşulları
-Farklı kamera açıları
-Boş orman gibi negatif görüntüler
+Most of the available data should be placed in `train`.
 
-Örneğin 3.000 ayı görüntüsünün yaklaşık 2.400’ü train içine konur.
+For a bear detector, this should include:
 
-VAL
-Model val görüntülerinden öğrenmez. Her eğitim turundan sonra bunlarda ölçüm yapılır.
+- Different bear species and appearances.
+- Daytime, nighttime, and infrared images.
+- Close, distant, small, and large bears.
+- Animals partially hidden behind trees or other objects.
+- Different seasons and weather conditions.
+- Different camera angles.
+- Negative images such as empty forests.
 
-val, şu kararları etkiler:
+For example, approximately 2,400 of 3,000 bear images can be placed in `train` when using an 80/10/10 split.
 
-En iyi checkpoint’in seçilmesi
-Early stopping
-Precision, recall ve mAP ölçümleri
-Modelin ezberlemeye başlayıp başlamadığının görülmesi
-Confidence threshold gibi ayarların belirlenmesi
+### VAL
 
-3.000 görüntüde yaklaşık 300 görüntü val içine konur.
+The model does not learn its weights from `val` images. Validation data is used after or during training iterations to measure performance on images that are not part of the training split.
 
-val içinde de mutlaka ayı bulunmalıdır. Ancak bunlar train içindeki ayı görüntülerinin kopyaları veya komşu video kareleri olmamalıdır.
+Validation results influence:
 
-TEST
-test, model tamamen bittikten sonra yalnızca son değerlendirme için kullanılır.
+- Selection of the best checkpoint.
+- Early stopping.
+- Precision, recall, and mAP measurements.
+- Detection of overfitting.
+- Decisions about settings such as the confidence threshold.
 
-Test sonucuna bakarak sürekli eğitim ayarı değiştirirsen test artık tarafsız olmaz ve pratikte ikinci bir val setine dönüşür.
+For 3,000 images, approximately 300 images can be placed in `val`.
 
-3.000 görüntüde yaklaşık 300 görüntü test içine konur.
+The validation split must also contain bear examples. However, they must not be copies of training images or neighboring frames from the same video event.
 
-NEGATIF GORUNTULER(modelde kullanilan classlar harici olan arkaplandir orman sokak cadde gibi)
-Minimum:  %10
-Önerilen: %20
-Üst sınır: %25–30
+### TEST
+
+The `test` split is used only for the final evaluation after training and model tuning have been completed.
+
+If training parameters are repeatedly changed after reviewing test results, the test set is no longer impartial and effectively becomes a second validation set.
+
+For 3,000 images, approximately 300 images can be placed in `test`.
+
+### NEGATIVE IMAGES
+
+Negative images are background images that do not contain any of the classes used by the model. Examples include empty forests, streets, roads, and empty camera-trap scenes.
+
+Suggested starting ranges:
+
+```text
+Minimum:     10%
+Recommended: 20%
+Upper range: 25-30%
+```
+
+These percentages are not universal rules. The correct ratio depends on the real deployment environment and should be adjusted using validation results and false-positive behavior.
+
 </details>
 
+## Installation
 
-WINDOWS
+### Windows
+
+Install the required Python packages:
+
+```powershell
 py -m pip install questionary PyYAML
+```
+
+Run the program:
+
+```powershell
+py "merge_yolo_datasets(1).py"
+```
+
+If your file is named `merge_yolo_datasets.py`, use:
+
+```powershell
 py merge_yolo_datasets.py
+```
+
+The program asks you to select Windows or Linux mode when it starts.
+
+### Linux Packages
 
 <details>
-<summary>Linux Packages</summary>
-<details>
-  <summary>Arch Packages</summary>
-   sudo pacman -S python xdg-utils
-   </details>
+<summary>Arch Linux packages</summary>
 
-<details>
-  <summary>Debian/Ubuntu Packages</summary>
-   sudo apt update
-   sudo apt install python3 python3-venv python3-pip xdg-utils
-   </details>
+```bash
+sudo pacman -S python xdg-utils
+```
 
-<details>
-  <summary>Fedora Packages</summary>
-   sudo dnf install python3 python3-pip xdg-utils
-   </details>
 </details>
-   
 
+<details>
+<summary>Debian/Ubuntu packages</summary>
 
+```bash
+sudo apt update
+sudo apt install python3 python3-venv python3-pip xdg-utils
+```
+
+</details>
+
+<details>
+<summary>Fedora packages</summary>
+
+```bash
+sudo dnf install python3 python3-pip xdg-utils
+```
+
+</details>
+
+### First Run on Linux
+
+Using a virtual environment is recommended:
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install questionary PyYAML
-python3 merge_yolo_datasets.py
+python3 "merge_yolo_datasets(1).py"
+```
 
-AFTER FIRST RUN
+If your file is named `merge_yolo_datasets.py`, run:
+
+```bash
+python3 merge_yolo_datasets.py
+```
+
+### After the First Run
+
+Activate the existing virtual environment and start the program:
+
+```bash
 source .venv/bin/activate
-python3 merge_yolo_datasets.py
+python3 "merge_yolo_datasets(1).py"
+```
 
-Kod, çalıştırıldığı dizindeki dataset klasörlerini otomatik bulur. Beklenen yapı:
+## Automatic Dataset Discovery
 
+The program automatically discovers dataset directories located in the directory from which it is executed.
+
+An example project layout is:
+
+```text
 merge_yolo_datasets.py
-
 
 bear/
 ├── train/
 │   ├── images/
 │   └── labels/
-├── valid/
+├── val/
 │   ├── images/
 │   └── labels/
 ├── test/
 │   ├── images/
 │   └── labels/
 └── data.yaml
-
-
-
-
-
-Eksik train, valid, test, images ve labels klasörlerini gerektiğinde oluşturur.
-
-Ana menü
-(1) Fotograflar icin bos/negatif label olustur
-(2) Class'lari filtrele/azalt
-(3) Datasetleri ana dataset icine birlestir
-(4) Train/val/test oranlariyla yeniden bolustur
-(5) Ana dataseti images/split + labels/split duzenine cevir
-(6) Datasetleri yalnizca kontrol et
-(7) Ana dataseti ZIP dosyasi yap
-(0) Cikis
-
-# YOLO Dataset Yönetim Aracı
-
-Bu araç YOLO formatındaki datasetlerde negatif label oluşturma, class filtreleme, dataset birleştirme, train/val/test bölüştürme, klasör düzenini dönüştürme, doğrulama ve ZIP oluşturma işlemlerini yapar.
-
-## Ana menü
-
-(1) Fotoğraflar için boş/negatif label oluştur
-(2) Class'ları filtrele/azalt
-(3) Datasetleri ana dataset içine birleştir
-(4) Train/val/test oranlarıyla yeniden bölüştür
-(5) Ana dataseti images/split + labels/split düzenine çevir
-(6) Datasetleri yalnızca kontrol et
-(7) Ana dataseti ZIP dosyası yap
-(0) Çıkış
-
-## Klasör seçme sistemi
-
-Programdaki bütün kaynak ve hedef klasör seçimlerinde aynı gezilebilir klasör seçici kullanılır.
-
-Yukarı/aşağı: Listede hareket et
-Sağ ok veya Space: Seçili klasöre gir
-Sol ok veya Esc: Bir üst klasöre çık
-Enter: Bulunduğun klasörü seç
-Ctrl+C: İşlemi iptal et
-
-Dataset, kaynak, hedef ve ZIP kayıt klasörü seçimlerinde farklı diskler ve dizinler arasında gezilebilir.
-
-Windows'ta `C:\`, `D:\` gibi kullanılabilir diskler listelenir.
-
-Linux'ta dosya sistemindeki erişilebilir dizinler arasında gezilebilir.
-
-## Desteklenen dataset düzeni
-
-Düzenleme işlemlerinde kullanılan çalışma düzeni:
-
-```text
-dataset/  
-├── data.yaml  
-├── train/  
-│   ├── images/  
-│   └── labels/  
-├── val/  
-│   ├── images/  
-│   └── labels/  
-└── test/  
-    ├── images/  
-    └── labels/  
 ```
 
-Program eski datasetlerde bulunan `valid` klasörünü okuyabilir ancak oluşturduğu standart klasörün adı `val` olur.
+Legacy datasets using `valid` instead of `val` can also be read. New standardized output directories are created using the name `val`.
 
-## 1. Fotoğraflar için boş/negatif label oluştur
+Missing `train`, `val`, `test`, `images`, and `labels` directories are created when required by the selected operation.
 
-Bu seçenek, içerisinde hedef obje bulunmayan arka plan görüntüleri için boş YOLO label dosyaları oluşturur.
+## Folder Selection System
 
-Önce fotoğrafların bulunduğu gerçek `images` klasörü seçilir.
-
-Program aynı seviyedeki `labels` klasörünü otomatik olarak belirler.
-
-Örneğin:
+The same navigable folder picker is used for all source, destination, dataset, backup, and ZIP-output folder selections.
 
 ```text
-train/  
-├── images/  
-└── labels/  
+Up/Down:           Move through the list
+Right Arrow/Space: Enter the selected directory
+Left Arrow/Esc:    Go to the parent directory
+Enter:             Select the current directory
+Ctrl+C:            Cancel the operation
 ```
 
-Her resim için aynı kök ada sahip boş bir `.txt` dosyası oluşturulur.
+The picker is not restricted to the directory from which the program was started. You can navigate between different disks and directories when selecting datasets, sources, destinations, and ZIP-output locations.
 
-Örneğin:
+On Windows, available drives such as `C:\` and `D:\` are listed.
+
+On Linux, you can navigate through accessible directories in the filesystem.
+
+## Supported Working Dataset Layout
+
+Dataset-editing operations use the following working layout:
 
 ```text
-forest001.jpg → forest001.txt  
-forest002.png → forest002.txt  
+dataset/
+├── data.yaml
+├── train/
+│   ├── images/
+│   └── labels/
+├── val/
+│   ├── images/
+│   └── labels/
+└── test/
+    ├── images/
+    └── labels/
 ```
 
-Oluşturulan `.txt` dosyaları tamamen boş olur. Bu dosyalar görüntünün negatif, yani hedef obje içermeyen bir görüntü olduğunu belirtir.
+The program can read a legacy `valid` directory, but standardized output uses `val`.
 
-`labels` klasörü yoksa otomatik oluşturulur.
+## 1. Create Empty/Negative Labels for Images
 
-Klasörün içinde daha önceden oluşturulmuş label dosyaları varsa program şu şekilde açık onay ister:
+This option creates empty YOLO label files for background images that do not contain any target object.
+
+First, select the actual `images` directory containing the photographs.
+
+The program automatically identifies the sibling `labels` directory at the same level.
+
+For example:
 
 ```text
-Bu labels klasörü dolu. Mevcut label dosyalarının üzerine yazmak ister misiniz?  
+train/
+├── images/
+└── labels/
 ```
 
-Onay verilirse işlemden önce mevcut `.txt` dosyalarının yedeği oluşturulur:
+An empty `.txt` file with the same stem is created for every image:
 
 ```text
-labels_empty_backup_....zip  
+forest001.jpg -> forest001.txt
+forest002.png -> forest002.txt
 ```
 
-Yalnızca seçilen `images` klasöründeki resimlerle aynı ada sahip label dosyaları boşaltılır. İlgisiz label dosyaları değiştirilmez.
+The generated `.txt` files are completely empty. An empty label indicates that the corresponding image is a negative image and contains no target object.
 
-Aynı kök ada sahip birden fazla resim bulunursa işlem durdurulur. Örneğin aynı klasörde hem `forest01.jpg` hem de `forest01.png` bulunması tek bir `forest01.txt` label’ına karşılık geleceği için güvenli değildir.
+If the `labels` directory does not exist, it is created automatically.
 
-İşlem sırasında ilerleme durumu gösterilir. İşlem sonunda her resim için boş label oluşturulup oluşturulmadığı kontrol edilir.
-
-Bu özellik yalnızca gerçekten boş görüntülerde kullanılmalıdır. Görüntüde hayvan bulunduğu hâlde boş label oluşturulursa model bu hayvanı arka plan olarak öğrenebilir.
-
-Negatif görüntü oranı sabit bir kural değildir. Başlangıç için toplam train+val+test görüntülerinin yaklaşık `%10–20` kadarı negatif görüntü olarak kullanılabilir. Fotokapanın gerçek kullanım ortamına göre bu oran doğrulama sonuçlarıyla ayarlanmalıdır.
-
-## 2. Class'ları filtrele/azalt
-
-Bu menü üç farklı işlem içerir:
+If the directory already contains label files, the program requests explicit confirmation:
 
 ```text
-(1) Class'ları tut veya kaldır  
-(2) Birden fazla class'ı tek class'ta birleştir  
-(3) Bütün label class ID'lerini tek bir değere çevir  
+This labels directory is not empty. Do you want to overwrite the existing label files?
 ```
 
-### 2.1. Class'ları tut veya kaldır
-
-Bir veya birden fazla class seçilebilir.
-
-İşlem sırası şöyledir:
+If the operation is confirmed, the existing `.txt` files are backed up first:
 
 ```text
-Class'ları filtrelenecek dataset  
-Filtrelenmesini istediğiniz class'ları seçin  
-Nasıl resimler filtrelenmeli?  
-Yapmak istediğiniz işlem  
-Hangi tür için geçerli olsun?  
-Her class için kaç tane filtrelensin?  
+labels_empty_backup_....zip
 ```
 
-Resimlerin nasıl filtreleneceği için iki yöntem bulunur.
+Only label files whose names correspond to images in the selected `images` directory are emptied. Unrelated label files are not modified.
 
-Birinci yöntem:
+If multiple images have the same stem, the operation stops. For example, having both `forest01.jpg` and `forest01.png` in the same directory is unsafe because both images would correspond to the same `forest01.txt` label file.
+
+Progress is displayed while labels are created. When the operation finishes, the program verifies that an empty label exists for every selected image.
+
+This feature must only be used for genuinely empty images. If an image contains an animal but receives an empty label, the model may learn to treat that animal as background.
+
+A fixed negative-image ratio does not apply to every project. As a starting point, approximately 10-20% of the combined train, validation, and test images can be negative. Adjust this ratio according to the real camera-trap environment and validation results.
+
+## 2. Filter/Reduce Classes
+
+This menu contains three operations:
 
 ```text
-Yeni data.yaml'da class'i bulunmayacak bir obje, modeli seçilen class için eğiten resimde bulunabilir (önerilen)  
+(1) Keep or remove classes
+(2) Merge multiple classes into one class
+(3) Convert all label class IDs to one value
 ```
 
-Bu yöntemde seçilen class kutuları korunur.
+### 2.1. Keep or Remove Classes
 
-Seçilmeyen class kutuları oluşturulan label dosyasından kaldırılır.
+One or more classes can be selected.
 
-Hedef kutusu kalmayan bir görüntü negatif görüntü olarak tutulabilir ve label dosyası boş bırakılır.
-
-Ancak resimde görünen fakat label’dan kaldırılan objeler model açısından arka plan olarak değerlendirilebilir. Bu nedenle oluşturulan dataset görsel olarak kontrol edilmelidir.
-
-İkinci yöntem:
+The prompts follow this order:
 
 ```text
-Sadece seçtiğimiz class'ların box'ının bulunduğu resimler kullanılsın  
+Dataset whose classes will be filtered
+Select the classes you want to filter
+How should the images be filtered?
+Which operation do you want to perform?
+Which group should the operation apply to?
+How many images should be filtered for each class?
 ```
 
-Bu yöntemde resimde seçilmeyen herhangi bir class kutusu bulunuyorsa görüntü kullanılmaz.
+There are two image-filtering methods.
 
-Bu seçenek daha temiz bir class dataseti oluşturur ancak kullanılabilecek resim sayısını azaltabilir.
-
-İşlemin hangi class’lara uygulanacağı seçilebilir:
+#### Method 1: Keep selected boxes and remove unwanted boxes
 
 ```text
-Seçilen class'lar  
-Seçilmeyen class'lar  
+An object whose class will not exist in the new data.yaml may still appear in an image used to train the model for a selected class (recommended)
 ```
 
-Program etkili olan her class için ayrı ayrı kaç görüntü istendiğini sorar.
+With this method:
+
+- Bounding boxes belonging to selected classes are preserved.
+- Bounding boxes belonging to unselected classes are removed from the generated label file.
+- An image with no remaining target box can be kept as a negative image with an empty label.
+
+However, an object that remains visible in an image after its annotation has been removed may be interpreted as background by the model. The resulting dataset should therefore be inspected visually.
+
+#### Method 2: Use only images containing selected-class boxes
 
 ```text
-0 = Uygun olan bütün görüntüleri kullan  
+Use only images that contain bounding boxes belonging to the selected classes
 ```
 
-Örneğin filtreleme sonrasında bir class için mevcut dağılım şu şekildeyse:
+With this method, an image is not used if it contains a bounding box belonging to any unselected class.
+
+This produces a cleaner class-specific dataset but may significantly reduce the number of usable images.
+
+The operation can be applied to:
 
 ```text
-train: 10  
-val:    4  
-test:   3  
+Selected classes
+Unselected classes
 ```
 
-Toplam 8 görüntü istendiğinde program görüntüleri split oranını koruyarak yaklaşık şu şekilde seçer:
+The program asks separately how many images should be processed for each affected class.
 
 ```text
-train: 5  
-val:   2  
-test:  1  
+0 = Use every eligible image
 ```
 
-Benzer şekilde mevcut dağılım `10000/4000/3000` ve istenen sayı 800 ise yaklaşık `471/188/141` görüntü alınır.
-
-Hangi görüntülerin seçileceği sabit seed kullanılarak belirlenir. Aynı dataset ve aynı ayarlarla işlem tekrarlandığında mümkün olduğunca aynı sonuç elde edilir.
-
-Bir görüntü birden fazla seçilen class içeriyorsa aynı görüntü birden fazla kotaya katkı sağlayabilir ancak yalnızca bir defa kopyalanır veya silinir. Bu nedenle çok class’lı seçimlerde toplam benzersiz görüntü sayısı class başına girilen sayıların toplamından farklı olabilir.
-
-Yapılabilecek işlemler:
+If the available distribution for a class after filtering is:
 
 ```text
-Başka dosyaya kopyalama  
-Silmek  
+train: 10
+val:    4
+test:   3
 ```
 
-#### Başka dosyaya kopyalama
-
-Önce kopyalamanın yapılacağı dizin seçilir.
-
-Ardından program şunu sorar:
+and eight images are requested, the program approximately preserves the split proportions:
 
 ```text
-Yeni hedef dataset klasörünün adı:  
+train: 5
+val:   2
+test:  1
 ```
 
-Bu alan boş bırakılırsa seçilen dizinin kendisi hedef dataset olarak kullanılır. Gerekli `train`, `val`, `test` ve `data.yaml` dosya ve klasörleri doğrudan bu dizinde oluşturulur veya mevcut olanlar kullanılır.
+Similarly, if the available distribution is `10000/4000/3000` and 800 images are requested, approximately `471/188/141` images are selected.
 
-Bir isim yazılırsa seçilen dizinin altında bu isimde yeni bir dataset klasörü oluşturulur veya aynı isimdeki mevcut dataset kullanılır.
+The files are selected using a fixed seed. Repeating the operation with the same dataset and settings should produce the same result whenever possible.
 
-Filtrelenmiş görüntüler mevcut split’leri korunarak kopyalanır:
+If one image contains multiple selected classes, it can contribute to multiple per-class quotas, but it is copied or deleted only once. Therefore, the total number of unique images may differ from the sum of the numbers entered for each class.
+
+Available actions:
 
 ```text
-Kaynak train → Hedef train  
-Kaynak val   → Hedef val  
-Kaynak test  → Hedef test  
+Copy to another directory
+Delete
 ```
 
-Görüntüyle birlikte aynı ada sahip label dosyası da kopyalanır.
+#### Copy to Another Directory
 
-Hedefte `data.yaml` bulunuyorsa kaynak ve hedef class isimleri karşılaştırılır.
+First, select the destination directory.
 
-Aynı class ismi hedefte farklı bir ID ile bulunuyorsa program hedefteki ID’yi kullanmayı teklif eder.
-
-Örneğin:
+The program then asks:
 
 ```text
-Kaynak: 0 = bear  
-Hedef:  2 = bear  
+Name of the new target dataset directory:
 ```
 
-Bu durumda kopyalanan label dosyalarındaki `bear` ID’si `0 → 2` olarak değiştirilir.
+If this field is left empty, the selected directory itself is used as the target dataset. The required `train`, `val`, `test`, and `data.yaml` files and directories are created directly in that location, or existing ones are used.
 
-Kullanıcı bu eşleştirmeyi reddederse datasetin bozulmasını önlemek için kopyalama işlemi iptal edilir.
+If a name is entered, a dataset directory with that name is created under the selected directory, or an existing dataset with the same name is used.
 
-Kaynak class ID’si hedefte başka bir class tarafından kullanılıyorsa program en yakın boş ve güvenli ID’yi önerir.
-
-Örneğin:
+Filtered images are copied while preserving their existing split:
 
 ```text
-Hedef:  
-0 = bear  
-1 = boar  
-  
-Kaynak:  
-1 = wolf  
+Source train -> Target train
+Source val   -> Target val
+Source test  -> Target test
 ```
 
-Bu durumda program filtrelenmiş `wolf` label değerlerini `2` yapmak isteyip istemediğinizi sorar.
+The label file with the matching stem is copied together with each image.
 
-Hedef datasetin mevcut class’ları ve label dosyaları korunur. Yalnızca yeni kopyalanan label dosyalarının class ID’leri gerekli olduğunda dönüştürülür.
+If the destination already contains `data.yaml`, the source and destination class names are compared.
 
-Hedefte label dosyaları bulunduğu hâlde `data.yaml` yoksa mevcut ID’lerin hangi class anlamına geldiği bilinemez. Datasetin bozulmasını önlemek için işlem durdurulur.
+If the same class name exists in the destination under a different ID, the program offers to use the destination ID.
 
-Dosya adı çakışırsa görüntü ve label birlikte yeniden adlandırılır:
+For example:
 
 ```text
-bear_dataset__image001.jpg  
-bear_dataset__image001.txt  
+Source:      0 = bear
+Destination: 2 = bear
 ```
 
-Kopyalama öncesinde hedef datasetin mevcut label ve YAML dosyaları yedeklenir.
+The `bear` ID in the copied label files is converted from `0` to `2`.
 
-#### Silmek
+If the user rejects this mapping, the copy operation is cancelled to prevent dataset corruption.
 
-Bu işlem uygun bulunan resim ve label çiftlerini datasetten kaldırır.
+If a source class ID is already used by another class in the destination, the program suggests the nearest available safe ID.
 
-Bir görüntüde birden fazla class varsa program diğer class’ların da bu görüntüyle birlikte kaybedilebileceğini belirtir.
-
-Silme işlemi açık onay alınmadan başlatılmaz.
-
-Oluşturulan otomatik yedekler çoğunlukla label ve YAML dosyalarını içerir. Silinen büyük görüntü dosyaları bu metadata yedeğinden geri getirilemez.
-
-### 2.2. Birden fazla class'ı tek class'ta birleştir
-
-Bu seçenek aynı dataset içerisindeki birden fazla class’ı tek bir class altında birleştirir.
-
-Örneğin:
+For example:
 
 ```text
-polar_bear  
-black_bear  
-brown_bear  
+Destination:
+0 = bear
+1 = boar
+
+Source:
+1 = wolf
 ```
 
-class’ları `bear` class’ı altında birleştirilebilir.
+The program asks whether the filtered `wolf` label values should be changed to `2`.
 
-Önce birleştirilecek en az iki class seçilir.
+Existing classes and labels in the destination dataset are preserved. Only newly copied label files are remapped when necessary.
 
-Ardından seçilen class’lardan hangisinin hedef class olarak kullanılacağı belirlenir.
+If label files exist in the destination but `data.yaml` is missing, the meaning of the existing IDs cannot be determined safely. The operation stops to prevent dataset corruption.
 
-Seçilen bütün class ID’leri hedef class ID’sine dönüştürülür.
-
-Aynı görüntüde birden fazla kutu varsa kutular silinmez. Her kutu korunur ancak class ID’leri aynı class’ı gösterecek şekilde değiştirilir.
-
-Birleştirme sonrasında kalan class ID’leri `0` değerinden başlayarak yeniden sıralanır ve `data.yaml` güncellenir.
-
-Boş negatif label dosyaları boş olarak korunur.
-
-İşlem öncesinde label ve `data.yaml` yedeği oluşturulur. İşlem sırasında ilerleme durumu gösterilir ve sonuç doğrulanır.
-
-### 2.3. Bütün label class ID'lerini tek bir değere çevir
-
-Bu seçenek bütün dolu label satırlarının ilk değerini seçilen tek bir class ID’sine dönüştürür.
-
-`data.yaml` içinde class isimleri bulunursa program tespit ettiği class’ları listeler ve hedef class bu listeden seçilir. Böylece class adının birebir elle yazılması gerekmez.
-
-Program `data.yaml` veya class listesi bulamazsa şu durumu bildirir:
+If a filename collision occurs, the image and label are renamed together:
 
 ```text
-Class bilgisi bulunamadı. Bu nedenle hedef class ID ve class adını elle girmeniz gerekiyor.  
+bear_dataset__image001.jpg
+bear_dataset__image001.txt
 ```
 
-Yalnızca label satırındaki ilk değer değiştirilir. Koordinatlar, detection kutuları ve polygon noktaları korunur.
+Before copying, the destination dataset's current labels and YAML files are backed up.
 
-Boş negatif label dosyaları boş kalır.
+#### Delete
 
-İşlem sonunda `data.yaml` tek hedef class’a göre güncellenir.
+This action removes eligible image-label pairs from the dataset.
 
-Tek class’lı doğrudan YOLO eğitimi için genellikle class ID değerinin `0` olması beklenir. Farklı bir değer seçilirse program uyarı gösterir.
+If an image contains multiple classes, the program warns that annotations belonging to other classes may also be lost when the image is removed.
 
-İşlem öncesinde label ve YAML yedeği oluşturulur.
+Deletion does not begin without explicit confirmation.
 
-## 3. Datasetleri ana dataset içine birleştir
+Automatic backups usually contain label and YAML files. Deleted image files cannot be recovered from these metadata-only backups.
 
-Bu seçenek birden fazla YOLO datasetini tek bir ana dataset içinde birleştirir.
+### 2.2. Merge Multiple Classes into One Class
 
-Kaynak datasetler klasör seçiciyle sırayla seçilir. Seçim sırası yeni ana datasette eklenecek class’ların sırasını etkiler.
+This option combines multiple classes in the same dataset under one class.
 
-Class isimleri klasör adından değil, her datasetin `data.yaml` dosyasındaki `names` alanından okunur.
+For example:
 
-Program yeni bir hedef dataset oluşturmayı veya mevcut bir ana dataseti kullanmayı sorar.
+```text
+polar_bear
+black_bear
+brown_bear
+```
 
-Yeni dataset oluşturulacaksa ana dizin seçilir ve yeni dataset klasörünün adı girilir.
+These classes can be merged into `bear`.
 
-Mevcut dataset kullanılacaksa herhangi bir dizindeki hedef dataset seçilebilir.
+First, select at least two classes to merge.
 
-Önerilen seçenek class’ları `data.yaml` içindeki isimlere göre eşleştirir.
+Then select which of those classes will be used as the target class.
 
-Örneğin kaynak dataset:
+Every selected class ID is converted to the target class ID.
+
+If an image contains multiple bounding boxes, the boxes are not deleted. Each box is preserved, but its class ID is changed to represent the target class.
+
+After the merge, the remaining class IDs are reordered starting from `0`, and `data.yaml` is updated.
+
+Empty negative label files remain empty.
+
+Labels and `data.yaml` are backed up before the operation. Progress is displayed during processing, and the result is validated afterward.
+
+### 2.3. Convert All Label Class IDs to One Value
+
+This option changes the first value of every non-empty label row to one selected class ID.
+
+If class names are available in `data.yaml`, the program lists the detected classes and allows the target class to be selected. The class name therefore does not need to be typed manually with an exact match.
+
+If the program cannot find `data.yaml` or a usable class list, it reports:
+
+```text
+Class information could not be found. You must enter the target class ID and class name manually.
+```
+
+Only the first value of each label row is changed. Coordinates, detection boxes, and polygon points are preserved.
+
+Empty negative label files remain empty.
+
+After the operation, `data.yaml` is updated for the single target class.
+
+For direct single-class YOLO training, the expected class ID is generally `0`. The program displays a warning if a different value is selected.
+
+Labels and YAML files are backed up before the operation.
+
+## 3. Merge Datasets into a Main Dataset
+
+This option merges multiple YOLO datasets into one main dataset.
+
+Source datasets are selected one by one using the folder picker. The selection order affects the order in which new classes are added to a newly created main dataset.
+
+Class names are read from the `names` field in each dataset's `data.yaml`, not from directory names.
+
+The program asks whether a new target dataset should be created or an existing main dataset should be used.
+
+When creating a new dataset, select its parent directory and enter the name of the new dataset directory.
+
+When using an existing dataset, the destination dataset can be selected from any accessible directory.
+
+The recommended option matches classes by the names stored in `data.yaml`.
+
+Example source dataset:
 
 ```yaml
-names:  
-  0: polar_bear  
-  1: black_bear  
-  2: brown_bear  
+names:
+  0: polar_bear
+  1: black_bear
+  2: brown_bear
 ```
 
-Ana dataset:
+Example main dataset:
 
 ```yaml
-names:  
-  0: bear  
-  1: boar  
-  2: deer  
-  3: wolf  
-  4: cow  
-  5: person  
-  6: dog  
+names:
+  0: bear
+  1: boar
+  2: deer
+  3: wolf
+  4: cow
+  5: person
+  6: dog
 ```
 
-Birleştirme sonucu:
+Merged result:
 
 ```yaml
-names:  
-  0: bear  
-  1: boar  
-  2: deer  
-  3: wolf  
-  4: cow  
-  5: person  
-  6: dog  
-  7: polar_bear  
-  8: black_bear  
-  9: brown_bear  
+names:
+  0: bear
+  1: boar
+  2: deer
+  3: wolf
+  4: cow
+  5: person
+  6: dog
+  7: polar_bear
+  8: black_bear
+  9: brown_bear
 ```
 
-Kaynak label dosyalarındaki dönüşüm otomatik yapılır:
+Source label IDs are converted automatically:
 
 ```text
-0 → 7  
-1 → 8  
-2 → 9  
+0 -> 7
+1 -> 8
+2 -> 9
 ```
 
-Kaynak dosyalar değiştirilmez. Dönüşüm yalnızca ana datasete kopyalanan label dosyalarına uygulanır.
+Source files are not modified. Class-ID conversion is applied only to label files copied into the main dataset.
 
-İki datasette aynı isimli class varsa yeni class oluşturulmaz. Hedef dataset içindeki mevcut class ID kullanılır.
+If the same class name exists in both datasets, a new class is not created. The existing class ID in the target dataset is used.
 
-Örneğin kaynakta ve hedefte `brown_bear` varsa ikinci bir `brown_bear` class’ı eklenmez.
+For example, if both source and destination contain `brown_bear`, a second `brown_bear` class is not added.
 
-Class isimleri karşılaştırılırken gereksiz büyük/küçük harf ve boşluk farklılıkları normalize edilir.
+Unnecessary capitalization and surrounding whitespace differences are normalized when class names are compared.
 
-Dosya adı çakışırsa hem görüntü hem label birlikte yeniden adlandırılır:
+If a filename collision occurs, the image and label are renamed together:
 
 ```text
-bear_dataset__image001.jpg  
-bear_dataset__image001.txt  
+bear_dataset__image001.jpg
+bear_dataset__image001.txt
 ```
 
-Çok sınıflı bir dataseti class ID’lerini değiştirmeden kopyalamak yalnızca iki datasetin ID anlamları tamamen aynıysa güvenlidir.
+Copying a multi-class dataset without changing its class IDs is safe only when the ID meanings in both datasets are identical:
 
 ```text
-Kaynak 0 = bear  
-Hedef  0 = bear  
+Source 0 = bear
+Target 0 = bear
 ```
 
-Kaynakta `0=polar_bear`, hedefte `0=bear` ise doğrudan kopyalamak yanlıştır. Bu nedenle normal kullanımda `data.yaml adlarına göre eşleştir` seçeneği kullanılmalıdır.
+If the source uses `0=polar_bear` while the target uses `0=bear`, copying the labels directly is incorrect. For normal use, select the option that matches classes by their `data.yaml` names.
 
-Hedef datasette mevcut `data.yaml` bulunursa program class listesini koruma veya kaynak seçim sırasına göre yeniden kurma seçeneklerini sunabilir. Yeniden sıralama yapılırsa mevcut hedef label dosyaları da class isimlerine göre dönüştürülür.
+If the target dataset already contains `data.yaml`, the program may offer to preserve the current class list or rebuild it according to source-selection order. If classes are reordered, existing target labels are also remapped by class name.
 
-İşlem öncesinde hedef datasetin label ve YAML yedeği oluşturulur.
+The target dataset's labels and YAML files are backed up before merging.
 
-Kopyalama ve class ID dönüştürme sırasında ilerleme durumu gösterilir. İşlem tamamlandığında ana dataset doğrulanır.
+Progress is displayed during copying and class-ID conversion. The main dataset is validated when the operation finishes.
 
-## 4. Train/val/test oranlarıyla yeniden bölüştür
+## 4. Redistribute Using Train/Val/Test Ratios
 
-Bu seçenek bir veya birden fazla datasetteki görüntü-label çiftlerini yeniden train, val ve test klasörlerine dağıtır.
+This option redistributes image-label pairs from one or more datasets across train, validation, and test directories.
 
-Program önce şunları sorar:
+The program asks:
 
 ```text
-Kaç dataset klasörünüz var?  
-Tek class içeren dataset klasörlerini seçin  
-Çok class içeren dataset klasörlerini seçin  
-Train yüzdesi  
-Val yüzdesi  
-Test yüzdesi  
+How many dataset directories do you have?
+Select dataset directories containing one class
+Select dataset directories containing multiple classes
+Train percentage
+Validation percentage
+Test percentage
 ```
 
-Burada sorulan sayı class sayısı değil, işleme alınacak dataset klasörü sayısıdır.
+The first number is the number of dataset directories to process, not the number of classes.
 
-Seçilen tek class ve çok class datasetlerinin toplamı girilen dataset sayısıyla aynı olmalıdır.
+The total number of selected single-class and multi-class datasets must match the entered dataset count.
 
-Varsayılan oranlar:
+Default ratios:
 
 ```text
-train: %80  
-val:   %10  
-test:  %10  
+train: 80%
+val:   10%
+test:  10%
 ```
 
-Oranların toplamı `%100` olmalıdır.
+The percentages must total `100%`.
 
-Bir split için `%0` girilebilir. Bu durumda ilgili split klasörü boş olarak oluşturulur.
+A split can be assigned `0%`. Its directory is still created but remains empty.
 
-`val` veya `test` klasörü kaynak datasette bulunmasa bile gerekli klasörler otomatik oluşturulur.
+If `val` or `test` does not exist in a source dataset, the required directories are created automatically.
 
-Program mevcut train, val ve test klasörlerindeki bütün resim-label çiftlerini toplar ve yeniden dağıtır.
+The program collects all image-label pairs from the current train, validation, and test directories and redistributes them.
 
-Tek class içeren datasetlerde dağıtım görüntü sayısı temel alınarak yapılır.
+For single-class datasets, distribution is based on the number of images.
 
-Çok class içeren datasetlerde label içerikleri okunur ve mevcut class dağılımı yaklaşık olarak korunmaya çalışılır.
+For multi-class datasets, label contents are read and the existing class distribution is preserved as closely as possible.
 
-Örneğin mevcut kutu dağılımı:
+For example, if the existing bounding-box distribution is:
 
 ```text
-polar_bear : black_bear : brown_bear  
-3          : 5          : 8  
+polar_bear : black_bear : brown_bear
+3          : 5          : 8
 ```
 
-ise her class’tan zorla eşit sayıda görüntü seçilmez. Yaklaşık `3:5:8` dağılımı korunmaya çalışılır.
+the program does not force an equal number of images from each class. It attempts to preserve the approximate `3:5:8` distribution.
 
-Nadir class içeren görüntülere yerleştirme sırasında öncelik verilir.
+Images containing rare classes receive priority during placement.
 
-Aynı görüntüde üç class varsa bu görüntü üç class’ın hedefine de katkı sağlar. Bu nedenle çok etiketli datasetlerde her class hedefini matematiksel olarak tam tutturmak her zaman mümkün değildir.
+If one image contains three classes, that image contributes toward the target of all three classes. Exact per-class mathematical targets are therefore not always possible in multi-label datasets.
 
-Toplam train, val ve test görüntü sayıları ise belirlenen oranlara tam olarak dağıtılır.
+The total train, validation, and test image counts are still distributed according to the requested ratios.
 
-Train, val ve test içindeki görüntüler birbirinden farklı olmalıdır. Aynı görüntü birden fazla split içinde bulunmamalıdır.
+Images in train, validation, and test must be different. The same image must not appear in more than one split.
 
-Bir class’ın yalnızca train içinde bulunması yeterli değildir. Mümkün olan durumlarda bear gibi eğitilen her class’ın val ve test içinde de örnekleri bulunmalıdır.
+It is not sufficient for a class to exist only in train. Whenever enough examples are available, every trained class, such as `bear`, should also be represented in validation and test.
 
-Train modelin ağırlıkları öğrenmesi için kullanılır.
+`train` is used to learn model weights.
 
-Val eğitim sırasında modelin görmediği görüntüler üzerindeki başarısını takip etmek ve ayarları değerlendirmek için kullanılır.
+`val` is used during training to measure performance on unseen images and evaluate training decisions.
 
-Test ise eğitim ve ayarlama tamamlandıktan sonra modelin son performansını tarafsız biçimde ölçmek için kullanılır.
+`test` is used after training and tuning are complete to obtain an impartial final performance measurement.
 
-Aynı videodan veya aynı fotokapan olayından gelen birbirine çok benzeyen kareler farklı split’lere dağıtılmamalıdır. Aksi hâlde model aynı olayın benzer görüntülerini önceden görmüş olur ve sonuçlar gerçekte olduğundan daha iyi çıkabilir.
+Highly similar frames from the same video or camera-trap event should not be distributed across different splits. Otherwise, the model may have already seen nearly identical views of the event, causing evaluation results to appear better than real-world performance.
 
-Program görsel benzerlikten aynı video veya fotokapan olayını otomatik olarak tanıyamaz. Bu karelerin önceden aynı olay grubu altında tutulması gerekir.
+The program cannot automatically determine whether visually similar frames originate from the same video or camera-trap event. Such frames must be grouped by event before redistribution.
 
-Bölüştürme sırasında dosyaların geçici alana alınması ve yeni split’lere yerleştirilmesi için ilerleme durumu gösterilir.
+Progress is shown while files are moved to temporary storage and placed into their new splits.
 
-İşlem öncesinde label ve `data.yaml` yedeği oluşturulur. Büyük datasetlerde yüzlerce GB’lık gereksiz yedek oluşmaması için bütün görüntüler yedeğe eklenmez.
+Labels and `data.yaml` are backed up before redistribution. All images are not included in the automatic backup because that could create unnecessarily large archives containing hundreds of gigabytes.
 
-## Eksik label denetimi
+### Missing Label Handling
 
-Bir resmin aynı isimli label dosyası bulunamazsa program şu bilgiyi gösterir:
+If an image does not have a label file with the same stem, the program reports:
 
 ```text
-image001.jpg isimli dosyaya ait label bulunamadı  
+The label file belonging to image001.jpg could not be found
 ```
 
-Ardından şu seçenekler sunulur:
+It then offers:
 
 ```text
-(1) Resmi aç  
-(2) Devam et / şimdilik atla  
-(3) Programı sonlandır  
+(1) Open the image
+(2) Continue / skip for now
+(3) Terminate the program
 ```
 
-Resim açıldıktan sonra:
+After opening the image:
 
 ```text
-(1) Resmi sil  
-(2) Boş label oluştur  
-(3) Hiçbir şey yapma ve programı bitir  
+(1) Delete the image
+(2) Create an empty label
+(3) Do nothing and terminate the program
 ```
 
-Boş label oluşturma seçeneği yalnızca negatif görüntüler içindir.
+The empty-label option is only appropriate for genuine negative images.
 
-Resmi bulunmayan bağımsız `.txt` label dosyaları otomatik olarak silinmez veya değiştirilmez. Program hata vererek bu dosyaların konumlarını gösterir.
+Standalone `.txt` label files with no matching image are not deleted or modified automatically. The program reports an error and displays their locations.
 
-Windows'ta görüntü işletim sisteminin varsayılan görüntüleyicisiyle açılır.
+On Windows, images are opened using the operating system's default image viewer.
 
-Linux'ta görüntü açmak için `xdg-open` kullanılır. Gerekirse `xdg-utils` paketinin kurulması istenir.
+On Linux, `xdg-open` is used. The program may request installation of `xdg-utils` when necessary.
 
-## 5. Ana dataseti images/split + labels/split düzenine çevir
+## 5. Convert the Main Dataset to `images/split + labels/split`
 
-Bu seçenek çalışma düzenindeki ana dataseti eğitim, paylaşım veya ZIP hazırlığı için son klasör düzenine dönüştürür.
+This option converts the main dataset from the working layout to the final layout used for training, sharing, or ZIP packaging.
 
-Kaynak düzen:
+Source layout:
 
 ```text
-dataset/  
-├── train/  
-│   ├── images/  
-│   └── labels/  
-├── val/  
-│   ├── images/  
-│   └── labels/  
-└── test/  
-    ├── images/  
-    └── labels/  
+dataset/
+├── train/
+│   ├── images/
+│   └── labels/
+├── val/
+│   ├── images/
+│   └── labels/
+└── test/
+    ├── images/
+    └── labels/
 ```
 
-Dönüştürülen düzen:
+Converted layout:
 
 ```text
-dataset/  
-├── data.yaml  
-├── images/  
-│   ├── train/  
-│   ├── val/  
-│   └── test/  
-└── labels/  
-    ├── train/  
-    ├── val/  
-    └── test/  
+dataset/
+├── data.yaml
+├── images/
+│   ├── train/
+│   ├── val/
+│   └── test/
+└── labels/
+    ├── train/
+    ├── val/
+    └── test/
 ```
 
-Eski `valid` klasörü bulunursa standart `val` klasörüne dönüştürülür.
+If a legacy `valid` directory is found, it is converted to the standardized `val` name.
 
-Dosyalar kopyalanmaz, yeni düzene taşınır.
+Files are moved into the new layout rather than copied.
 
-Dataset kökünde daha önceden `images` veya `labels` klasörü bulunuyorsa yanlışlıkla üzerine yazmayı önlemek için işlem durdurulur.
+If `images` or `labels` already exists at the dataset root, the operation stops to prevent accidental overwriting.
 
-`data.yaml` içindeki train, val ve test yolları yeni klasör düzenine göre güncellenir.
+The train, validation, and test paths in `data.yaml` are updated for the new folder layout.
 
-Dönüştürmeden önce `data.yaml` yedeği datasetin yanına kaydedilir.
+A backup of `data.yaml` is stored next to the dataset before conversion.
 
-İşlem sonunda yeni klasör düzeni ve bütün resim-label eşleşmeleri kontrol edilir.
+After conversion, the program validates the new directory layout and all image-label matches.
 
-Bu işlem son paketleme adımı olarak düşünülmelidir. Filtreleme, birleştirme ve yeniden bölüştürme işlemleri çalışma düzeninde yapılmalı, klasör dönüşümü bunlardan sonra uygulanmalıdır.
+This should be treated as a final packaging step. Filtering, merging, and redistribution should be performed in the working layout before conversion.
 
-## 6. Datasetleri yalnızca kontrol et
+## 6. Validate Datasets Only
 
-Bu seçenek dosyaları değiştirmeden bir veya birden fazla dataseti doğrular.
+This option validates one or more datasets without modifying any files.
 
-Datasetler farklı disk ve klasörlerden seçilebilir.
+Datasets can be selected from different disks and directories.
 
-Kontrol sırasında ilerleme durumu gösterilir.
+Progress is displayed during validation.
 
-Program şu denetimleri yapar:
+The program checks:
 
 ```text
-Her resmin aynı isimli .txt label dosyası var mı?  
-Her label’ın karşılık gelen resmi var mı?  
-Aynı kök ada sahip birden fazla resim var mı?  
-Class ID negatif mi?  
-Class ID data.yaml içinde tanımlı mı?  
-Koordinatlar 0–1 aralığında mı?  
-Detection satırları geçerli mi?  
-Polygon satırları geçerli mi?  
-Bounding box genişlik ve yükseklik değerleri pozitif mi?  
-Boş negatif label dosyaları korunmuş mu?  
-Split başına resim ve label sayıları eşit mi?  
-Her class için kaç kutu var?  
+Does every image have a .txt label file with the same stem?
+Does every label have a corresponding image?
+Are there multiple images with the same stem?
+Is any class ID negative?
+Is every class ID defined in data.yaml?
+Are coordinates within the 0-1 range?
+Are detection rows valid?
+Are polygon rows valid?
+Are bounding-box width and height values positive?
+Are empty negative labels preserved?
+Are image and label counts equal in each split?
+How many bounding boxes exist for each class?
 ```
 
-Normal detection satırlarında class ID ile birlikte dört koordinat değeri bulunmalıdır.
+A normal object-detection row must contain a class ID followed by four coordinate values.
 
-Polygon satırlarında class ID’den sonra geçerli sayıda ve çiftler hâlinde koordinat bulunmalıdır.
+A polygon row must contain a class ID followed by a valid even number of coordinate values.
 
-Örnek doğrulama çıktısı:
+Example validation output:
 
 ```text
-train: resim=7000, label=7000, kutu=8450, negatif=900 [OK]  
-val  : resim=1000, label=1000, kutu=1210, negatif=125 [OK]  
-test : resim=1000, label=1000, kutu=1195, negatif=125 [OK]  
+train: images=7000, labels=7000, boxes=8450, negatives=900 [OK]
+val  : images=1000, labels=1000, boxes=1210, negatives=125 [OK]
+test : images=1000, labels=1000, boxes=1195, negatives=125 [OK]
 ```
 
-Resim sayısıyla kutu sayısının eşit olması gerekmez.
+The number of images does not need to equal the number of bounding boxes.
 
-Bir resimde sıfır, bir veya birden fazla kutu bulunabilir.
+An image can contain zero, one, or multiple bounding boxes.
 
-Eşit olması gereken değer, resim sayısıyla karşılık gelen label dosyası sayısıdır.
+The values that must match are the number of images and the number of corresponding label files.
 
-## 7. Ana dataseti ZIP dosyası yap
+## 7. Create a ZIP File from the Main Dataset
 
-Bu seçenek son klasör düzenine dönüştürülmüş ana dataseti ZIP dosyası hâline getirir.
+This option creates a ZIP archive from a main dataset that has already been converted to the final directory layout.
 
-Önce ZIP yapılacak dataset seçilir.
+First, select the dataset to archive.
 
-Ardından ZIP dosyasının kaydedileceği klasör ayrıca seçilir. ZIP dosyası kaynak datasetle aynı dizine kaydedilmek zorunda değildir.
+Then select the directory in which the ZIP file will be saved. The ZIP file does not have to be stored next to the source dataset.
 
-ZIP içine yalnızca gerekli dataset içerikleri eklenir:
+Only the required dataset contents are added to the archive:
 
 ```text
-data.yaml  
-images/  
-labels/  
+data.yaml
+images/
+labels/
 ```
 
-ZIP içinde fazladan bir dış dataset klasörü oluşturulmaz.
+An unnecessary outer dataset directory is not added inside the ZIP.
 
-Örneğin ZIP açıldığında doğrudan şu yapı görülür:
+Opening the ZIP therefore shows this structure directly:
 
 ```text
-data.yaml  
-images/train/  
-images/val/  
-images/test/  
-labels/train/  
-labels/val/  
-labels/test/  
+data.yaml
+images/train/
+images/val/
+images/test/
+labels/train/
+labels/val/
+labels/test/
 ```
 
-Boş train, val veya test klasörleri korunur.
+Empty train, validation, or test directories are preserved.
 
-Büyük datasetler için ZIP64 desteği kullanılır.
+ZIP64 support is used for large datasets.
 
-İşlem sırasında dosya ve işlenen veri miktarına göre ilerleme gösterilir.
+Progress is displayed according to the number of files and amount of processed data.
 
-ZIP önce geçici `.zip.part` dosyasına yazılır. İşlem başarıyla tamamlandıktan sonra gerçek `.zip` adına çevrilir.
+The archive is first written to a temporary `.zip.part` file. It is renamed to the final `.zip` name only after the operation finishes successfully.
 
-Aynı isimde ZIP dosyası bulunursa üzerine yazmadan önce açık onay istenir.
+If a ZIP with the same name already exists, explicit confirmation is required before it is overwritten.
 
-ZIP oluşturulduktan sonra arşiv bütünlük testi yapılır ve gerekli klasörlerin arşiv içinde bulunup bulunmadığı doğrulanır.
+After creation, the program performs an archive-integrity test and verifies that all required directories are present.
 
-## Son doğrulama
+## Final Validation
 
-Filtreleme, class birleştirme, dataset birleştirme, yeniden bölüştürme ve klasör dönüşümü gibi işlemler tamamlandığında sonuç dataset otomatik olarak kontrol edilir.
+After operations such as filtering, class merging, dataset merging, redistribution, and folder conversion, the resulting dataset is validated automatically.
 
-Kontrol sonucunda eksik resim, eksik label, geçersiz class ID veya bozuk koordinat bulunursa konumları kullanıcıya gösterilir.
+If a missing image, missing label, invalid class ID, or invalid coordinate is found, its location is displayed.
 
-İşlem başarılı olsa bile eğitimden önce özellikle val ve test görüntülerinin görsel olarak incelenmesi önerilir.
+Even when automatic validation succeeds, visually inspect validation and test images before training.
 
-Kontrol edilmesi gereken temel noktalar:
+Important checks include:
 
 ```text
-Aynı görüntü farklı split’lerde bulunuyor mu?  
-Aynı olaydan gelen çok benzer kareler farklı split’lere dağılmış mı?  
-Her önemli class val ve test içinde yeterince temsil ediliyor mu?  
-Negatif görüntüler gerçekten hedef obje içermiyor mu?  
-Filtreleme sonrasında görünür fakat etiketsiz bırakılmış objeler var mı?  
+Does the same image appear in multiple splits?
+Were highly similar frames from the same event distributed across different splits?
+Is every important class sufficiently represented in validation and test?
+Are negative images genuinely free of all target objects?
+Did filtering leave visible but unannotated target objects in any image?
 ```
 
-## Yedekleme
+Automatic validation can verify file structures and annotation values, but it cannot determine whether a visible object should have been annotated. Visual inspection remains necessary.
 
-Veri değiştiren işlemlerden önce otomatik yedek oluşturulur.
+## Backups
 
-Örnek yedek adları:
+Automatic backups are created before operations that modify data.
+
+Example backup names:
 
 ```text
-bear_filter_backup_....zip  
-bear_filter_copy_backup_....zip  
-bear_class_merge_backup_....zip  
-bear_class_id_backup_....zip  
-bear_merge_backup_....zip  
-bear_split_backup_....zip  
-labels_empty_backup_....zip  
+bear_filter_backup_....zip
+bear_filter_copy_backup_....zip
+bear_class_merge_backup_....zip
+bear_class_id_backup_....zip
+bear_merge_backup_....zip
+bear_split_backup_....zip
+labels_empty_backup_....zip
 ```
 
-Yedekler ilgili datasetin yanında oluşturulur.
+Backups are stored next to the relevant dataset.
 
-Filtreleme, class birleştirme, dataset birleştirme ve yeniden bölüştürme yedekleri çoğunlukla label dosyalarıyla `data.yaml` dosyasını içerir.
+Filtering, class merging, dataset merging, and redistribution backups usually contain label files and `data.yaml`.
 
-Bütün görüntüler yedeğe eklenmez. Bu sayede büyük datasetlerde çok büyük ve gereksiz yedek dosyaları oluşmaz.
+All images are not included. This prevents extremely large and unnecessary backup archives from being created for large datasets.
 
-Görüntü silme işlemlerinde otomatik metadata yedeğinin silinen görüntüleri geri getiremeyeceği unutulmamalıdır.
+Automatic metadata backups cannot restore deleted image files.
 
-## Windows kurulumu
+## Important Safety Notes
 
-```powershell
-py -m pip install questionary PyYAML  
-py "merge_yolo_datasets(1).py"  
-```
+- Keep an independent copy of the original dataset before using deletion or move-based conversion operations.
+- Do not assume that an automatic backup contains image files; most automatic backups protect labels and YAML metadata only.
+- Do not manually merge datasets solely by matching numeric class IDs unless the class meaning of every ID is identical.
+- Do not create empty labels for images that contain a target object.
+- Do not repeatedly tune the model using test results; use validation results for tuning and reserve test data for final evaluation.
+- Do not distribute neighboring frames from the same video or camera-trap event across different splits.
+- Run validation before training and again before creating the final ZIP archive.
 
-Program başlangıçta Windows veya Linux ortamını seçmenizi ister.
+## Platform Notes
 
-## Linux kurulumu
+The program's folder selection, path creation, dataset processing, and image-opening behavior account for both Windows and Linux path structures.
 
-Sanal ortam kullanılması önerilir:
+On Linux, opening an image externally requires `xdg-open`, provided by the `xdg-utils` package.
 
-```bash
-python3 -m venv .venv  
-source .venv/bin/activate  
-python -m pip install --upgrade pip  
-python -m pip install questionary PyYAML  
-python "merge_yolo_datasets(1).py"  
-```
-
-Eksik label kontrolünde resmi sistem görüntüleyicisiyle açmak için gerekirse `xdg-utils` kurulmalıdır.
-
-Debian veya Ubuntu:
-
-```bash
-sudo apt install xdg-utils  
-```
-
-Fedora:
-
-```bash
-sudo dnf install xdg-utils  
-```
-
-Arch Linux:
-
-```bash
-sudo pacman -S xdg-utils  
-```
-
-Programın klasör seçme, dosya yolu oluşturma ve dataset işlemleri hem Windows hem de Linux yol yapıları dikkate alınarak çalışır.
-
+On Windows, the default system image viewer is used.
