@@ -51,7 +51,7 @@
 - [x] Windows and Linux support
 
 
-`You can use `[`Wildlife_YOLO11l_Hailo8_Training2.ipynb`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/Wildlife_YOLO11l_Hailo8_Training2.ipynb)` as a guide to learn the details of the model creation process. Once you understand this process, you can use Universal_YOLO_Hailo_Training.ipynb to create well-trained models tailored to your specific needs.`
+`You can use `[`Wildlife_YOLO11l_Hailo8_Training2.ipynb`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/Wildlife_YOLO11l_Hailo8_Training2.ipynb)` as a guide to learn the details of the model creation process. Once you understand this process, you can use `[`Universal_YOLO_Hailo_Training.ipynb`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/Universal_YOLO_Hailo_Training_EN.ipynb)` to create well-trained models tailored to your specific needs.`
 
 
 ## 💡 Recommendations and Important Notes
