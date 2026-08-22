@@ -12,6 +12,8 @@
 
 ![Demo Image](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-1.webp)
 
+![Demo Image](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-2.webp)
+
 
 ## 🚀 Features
 - [x] Create empty YOLO label files for background and negative images
