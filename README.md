@@ -10,7 +10,7 @@
 `You can use `[`merge_yolo_datasets_EN.py`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/merge_yolo_datasets_EN.py)` to easily organize, filter, merge, validate, and redistribute your datasets before training.You can then use `[`Wildlife_YOLO11l_Hailo8_Training_EN.ipynb`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/Wildlife_YOLO11l_Hailo8_Training_EN.ipynb)` as a guide to learn the details of the model creation process. Once you understand this process, you can use `[`Universal_YOLO_Hailo_Training_EN.ipynb`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/Universal_YOLO_Hailo_Training_EN.ipynb)` to create well-trained models tailored to your specific needs.`
 
 
-[![Demo Image](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-1.webp)]
+![Demo Image](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-1.webp)
 
 
 ## 🚀 Features
