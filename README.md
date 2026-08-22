@@ -7,6 +7,12 @@
 <h1 align="center">Computer Vision AI model training for rasberry pi 5 and interactive command-line application for filtering, merging, splitting, validating, reorganizing, and packaging YOLO datasets</h1>  
 
 
+`You can use `[`merge_yolo_datasets_EN.py`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/merge_yolo_datasets_EN.py)` to easily organize, filter, merge, validate, and redistribute your datasets before training.You can then use `[`Wildlife_YOLO11l_Hailo8_Training_EN.ipynb`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/Wildlife_YOLO11l_Hailo8_Training_EN.ipynb)` as a guide to learn the details of the model creation process. Once you understand this process, you can use `[`Universal_YOLO_Hailo_Training_EN.ipynb`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/Universal_YOLO_Hailo_Training_EN.ipynb)` to create well-trained models tailored to your specific needs.`
+
+
+[![Demo Image](https://github.com
+
+
 ## 🚀 Features
 - [x] Create empty YOLO label files for background and negative images
 - [x] Filter datasets using one or multiple selected classes
@@ -49,9 +55,6 @@
 - [x] Preserve empty split directories inside generated ZIP archives
 - [x] Verify ZIP integrity after archive creation
 - [x] Windows and Linux support
-
-
-`You can use `[`merge_yolo_datasets_EN.py`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/merge_yolo_datasets_EN.py)` to easily organize, filter, merge, validate, and redistribute your datasets before training.You can then use `[`Wildlife_YOLO11l_Hailo8_Training_EN.ipynb`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/Wildlife_YOLO11l_Hailo8_Training_EN.ipynb)` as a guide to learn the details of the model creation process. Once you understand this process, you can use `[`Universal_YOLO_Hailo_Training_EN.ipynb`](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/Universal_YOLO_Hailo_Training_EN.ipynb)` to create well-trained models tailored to your specific needs.`
 
 
 ## 💡 Recommendations and Important Notes
