@@ -186,7 +186,7 @@ The program asks you to select Windows or Linux mode when it starts.
 <summary>Arch Linux packages</summary>
 
 ```bash
-sudo pacman -S python xdg-utils
+sudo pacman -S python python-pip xdg-utils
 ```
 
 </details>
