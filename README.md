@@ -219,7 +219,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install questionary PyYAML
-python3 "merge_yolo_datasets.py"
+python3 "merge_yolo_datasets_EN.py"
 ```
 
 ### After the First Run
