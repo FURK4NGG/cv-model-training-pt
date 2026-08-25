@@ -168,7 +168,7 @@ These percentages are not universal rules. The correct ratio depends on the real
 Install the required Python packages:
 
 ```powershell
-py -m pip install questionary PyYAML
+py -m pip install questionary PyYAML Pillow
 ```
 
 Run the program:
@@ -218,8 +218,7 @@ Using a virtual environment is recommended:
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
-python3 -m pip install questionary PyYAML
-python -m pip install Pillow
+python3 -m pip install questionary PyYAML Pillow
 python3 "merge_yolo_datasets_EN.py"
 ```
 
