@@ -228,7 +228,7 @@ Activate the existing virtual environment and start the program:
 
 ```bash
 source .venv/bin/activate
-python3 "merge_yolo_datasets.py"
+python3 "merge_yolo_datasets_EN.py"
 ```
 
 
