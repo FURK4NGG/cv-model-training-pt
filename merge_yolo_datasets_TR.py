@@ -248,10 +248,68 @@ def split_dirs(root, create=False):
 
 
 def looks_like_dataset(root):
-    return root.is_dir() and any(
-        (root / s / "images").is_dir() or (root / s / "labels").is_dir()
-        for s in (*SPLITS, "valid")
-    )
+    root = Path(root)
+    if not root.is_dir():
+        return False
+
+    # Layout A: train/images, train/labels, ...
+    for split in (*SPLITS, "valid"):
+        if (
+            (root / split / "images").is_dir()
+            or (root / split / "labels").is_dir()
+        ):
+            return True
+
+    # Layout B: images/train, images/val, images/test,
+    #            labels/train, labels/val, labels/test
+    for split in (*SPLITS, "valid"):
+        if (
+            (root / "images" / split).is_dir()
+            or (root / "labels" / split).is_dir()
+        ):
+            return True
+
+    return False
+
+
+def validation_split_dirs(root):
+    """Return existing image/label directories without creating anything.
+
+    Supports both YOLO layouts:
+      1. root/train/images + root/train/labels
+      2. root/images/train + root/labels/train
+    """
+    root = Path(root)
+    result = {}
+
+    for split in SPLITS:
+        # Prefer the layout that actually exists.
+        direct_images = root / split / "images"
+        direct_labels = root / split / "labels"
+
+        split_images = root / "images" / split
+        split_labels = root / "labels" / split
+
+        if direct_images.is_dir() or direct_labels.is_dir():
+            result[split] = {
+                "images": direct_images,
+                "labels": direct_labels,
+                "layout": "split/images + split/labels",
+            }
+        elif split_images.is_dir() or split_labels.is_dir():
+            result[split] = {
+                "images": split_images,
+                "labels": split_labels,
+                "layout": "images/split + labels/split",
+            }
+        else:
+            result[split] = {
+                "images": direct_images,
+                "labels": direct_labels,
+                "layout": "missing",
+            }
+
+    return result
 
 
 def dataset_folders():
@@ -266,12 +324,48 @@ def choose_one_dataset(message, exclude=None):
     folder = choose_directory(message, BASE_DIRECTORY).resolve()
     if folder in excluded:
         raise ValueError("Bu klasor bu islemde tekrar veya hedef olarak secilemez.")
-    if not looks_like_dataset(folder):
-        raise ValueError(
-            "Secilen klasor train/val/test altinda images veya labels iceren bir dataset degil: "
-            f"{folder}"
-        )
-    return folder
+
+    # Accept a standard YOLO dataset root:
+    #   dataset/
+    #     train/images + train/labels
+    #     val/images   + val/labels
+    #     test/images  + test/labels
+    #
+    # Also accept a split directory or an images directory. The validator
+    # should validate the selected dataset itself, not require the current
+    # working directory to be a dataset.
+    if looks_like_dataset(folder):
+        return folder
+
+    # If the selected folder is a dataset root whose splits are valid,
+    # looks_like_dataset() may reject it because its implementation expects
+    # a different layout. Detect the actual filesystem structure directly.
+    split_found = False
+    for split in SPLITS:
+        split_dir = folder / split
+        if not split_dir.is_dir():
+            continue
+        images_dir = split_dir / "images"
+        labels_dir = split_dir / "labels"
+        if images_dir.is_dir() or labels_dir.is_dir():
+            split_found = True
+            break
+
+    if split_found:
+        return folder
+
+    # Support the alternate layout labels/<split> if present.
+    for split in SPLITS:
+        images_dir = folder / split / "images"
+        labels_dir = folder / "labels" / split
+        if images_dir.is_dir() or labels_dir.is_dir():
+            return folder
+
+    raise ValueError(
+        "Secilen klasor taninan bir YOLO dataset yapisi degil. "
+        "Dataset kokunde train/val/test altinda images ve/veya labels "
+        f"klasorleri bulunamadi: {folder}"
+    )
 
 
 def choose_destination_folder(message, exclude=None):
@@ -3284,7 +3378,7 @@ def _impl_convert_to_zip_layout():
         print(f"  {aliases[split]} -> {split}: resim={ni}, label={nl}, kutu={nb}, negatif={ne}")
     print("\nEski: train/images + train/labels")
     print("Yeni: images/train + labels/train")
-    print("UYARI: Bu son paketleme adimidir; sonrasinda 1-3 numarali islemleri calistirmayin.")
+    print("UYARI: Bu son paketleme adimidir; sonrasinda 3-5 numarali islemleri calistirmayin.")
     if not ask_confirm("Ana dataset yapisi simdi donusturulsun mu?", False):
         print("Degisiklik yapilmadi.")
         return
@@ -3307,6 +3401,8 @@ def _impl_convert_to_zip_layout():
         yaml_backup = None
         print("data.yaml save dosyasi olusturulmadi.")
 
+    # Generate the unique temporary-directory suffix before using it.
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     temp = root / f"_layout_conversion_temp_{stamp}"
     if temp.exists():
         raise FileExistsError(f"Gecici klasor zaten var: {temp}")
@@ -3532,54 +3628,278 @@ def validate_flat_dataset(root, interactive=True, require_yaml=False):
 
 
 def validate_dataset(root, interactive=True, require_yaml=False):
+    root = Path(root).resolve()
+
     if interactive:
-        repair_missing_pairs(root)
+        # Do not create directories while validating. Repairing missing
+        # image/label pairs is a separate operation and must never turn an
+        # invalid layout into an apparently valid empty dataset.
+        pass
+
+    layout_paths = validation_split_dirs(root)
+    errors = []
+    warnings = []
+
+    existing_splits = [
+        split for split, paths in layout_paths.items()
+        if paths["images"].is_dir() or paths["labels"].is_dir()
+    ]
+
+    if not existing_splits:
+        raise ValueError(
+            "Dataset yapisi taninamadi. Beklenen iki yapi:\n"
+            "  1) train/images, train/labels, val/images, val/labels, "
+            "test/images, test/labels\n"
+            "  2) images/train, images/val, images/test, "
+            "labels/train, labels/val, labels/test"
+        )
+
+    # Load data.yaml without modifying the dataset.
     _, names, _ = load_yaml(root, required=require_yaml)
     known = set(names) if names else None
-    errors, total_images, total_labels, total_boxes, total_empty = [], 0, 0, 0, 0
-    class_boxes, summaries = Counter(), {}
-    all_labels = [
-        label
-        for paths in split_dirs(root, create=True).values()
-        for label in sorted(paths["labels"].glob("*.txt"))
-    ]
+
+    total_images = total_labels = total_boxes = total_empty = 0
+    class_boxes = Counter()
+    summaries = {}
+
+    all_labels = []
+    for split in SPLITS:
+        paths = layout_paths[split]
+        if paths["labels"].is_dir():
+            all_labels.extend(
+                sorted(paths["labels"].glob("*.txt"))
+            )
+
     processed_labels = 0
-    show_progress("Dataset dogrulama", 0, len(all_labels), f"0/{len(all_labels)} label")
-    for split, paths in split_dirs(root, create=True).items():
-        images, labels = image_files(paths["images"]), sorted(paths["labels"].glob("*.txt"))
-        i_stems, l_stems = {p.stem for p in images}, {p.stem for p in labels}
-        errors += [f"{root.name}/{split}: {s} resmine ait label yok" for s in i_stems-l_stems]
-        errors += [f"{root.name}/{split}: {s}.txt label'ina ait resim yok" for s in l_stems-i_stems]
-        boxes = empty = 0
+    show_progress(
+        "Dataset dogrulama",
+        0,
+        len(all_labels),
+        f"0/{len(all_labels)} label",
+    )
+
+    for split in SPLITS:
+        paths = layout_paths[split]
+        images_dir = paths["images"]
+        labels_dir = paths["labels"]
+
+        images = (
+            image_files(images_dir)
+            if images_dir.is_dir()
+            else []
+        )
+        labels = (
+            sorted(labels_dir.glob("*.txt"))
+            if labels_dir.is_dir()
+            else []
+        )
+
+        i_stems = {p.stem for p in images}
+        l_stems = {p.stem for p in labels}
+
+        if images_dir.is_dir() and not labels_dir.is_dir():
+            errors.append(
+                f"{root.name}/{split}: images klasoru var fakat labels klasoru yok"
+            )
+        if labels_dir.is_dir() and not images_dir.is_dir():
+            errors.append(
+                f"{root.name}/{split}: labels klasoru var fakat images klasoru yok"
+            )
+
+        errors += [
+            f"{root.name}/{split}: {s} resmine ait label yok"
+            for s in sorted(i_stems - l_stems)
+        ]
+        errors += [
+            f"{root.name}/{split}: {s}.txt label'ina ait resim yok"
+            for s in sorted(l_stems - i_stems)
+        ]
+
+        boxes = 0
+        empty = 0
+
         for label in labels:
             try:
                 lines, counts = parse_label(label, known)
-                boxes += len(lines); empty += not lines; class_boxes.update(counts)
+                box_count = len(lines)
+                boxes += box_count
+                empty += int(not lines)
+                class_boxes.update(counts)
+
             except ValueError as exc:
                 errors.append(str(exc))
+
             processed_labels += 1
-            if (processed_labels == len(all_labels) or
-                    processed_labels % max(1, len(all_labels) // 100) == 0):
+            if (
+                processed_labels == len(all_labels)
+                or processed_labels % max(1, len(all_labels) // 100) == 0
+            ):
                 show_progress(
-                    "Dataset dogrulama", processed_labels, len(all_labels),
+                    "Dataset dogrulama",
+                    processed_labels,
+                    len(all_labels),
                     f"{processed_labels}/{len(all_labels)} label",
                     finish=processed_labels == len(all_labels),
                 )
-        summaries[split] = len(images), len(labels), boxes, empty
-        total_images += len(images); total_labels += len(labels)
-        total_boxes += boxes; total_empty += empty
+
+        summaries[split] = (
+            len(images),
+            len(labels),
+            boxes,
+            empty,
+            paths["layout"],
+        )
+        total_images += len(images)
+        total_labels += len(labels)
+        total_boxes += boxes
+        total_empty += empty
+
     print(f"\nDogrulama: {root}")
-    for split, (ni, nl, nb, ne) in summaries.items():
-        print(f"  {split:5s}: resim={ni}, label={nl}, kutu={nb}, negatif={ne} "
-              f"[{'OK' if ni == nl else 'HATA'}]")
+    print("  Dataset layout kontrolu:")
+
+    layouts = {
+        paths["layout"]
+        for paths in layout_paths.values()
+        if paths["layout"] != "missing"
+    }
+
+    if len(layouts) == 1:
+        detected_layout = next(iter(layouts))
+        print(f"    Bulunan yapi: {detected_layout}")
+    elif layouts:
+        print(
+            "    UYARI: Farkli split'lerde farkli dizin yapilari bulundu: "
+            + ", ".join(sorted(layouts))
+        )
+        warnings.append("Split'ler arasinda farkli dataset dizin yapilari var.")
+
+    for split, summary in summaries.items():
+        ni, nl, nb, ne, layout = summary
+
+        if layout == "missing":
+            print(
+                f"  {split:5s}: resim={ni}, label={nl}, kutu={nb}, "
+                f"negatif={ne} [YOK]"
+            )
+            continue
+
+        status = "OK" if ni == nl and not any(
+            f"{root.name}/{split}:" in error for error in errors
+        ) else "HATA"
+
+        print(
+            f"  {split:5s}: resim={ni}, label={nl}, kutu={nb}, "
+            f"negatif={ne} [{status}]"
+        )
+
     if names:
         for cid in sorted(names):
-            print(f"  class {cid}:{names[cid]} kutu={class_boxes[cid]}")
-    print(f"  TOPLAM: resim={total_images}, label={total_labels}, "
-          f"kutu={total_boxes}, negatif={total_empty}")
-    if errors or total_images != total_labels:
-        raise RuntimeError(f"Dogrulama basarisiz ({len(errors)} hata):\n" + "\n".join(errors[:30]))
-    print("  SONUC: resim-label esleri ve YOLO etiketleri gecerli.")
+            print(
+                f"  class {cid}:{names[cid]} "
+                f"kutu={class_boxes[cid]}"
+            )
+
+    print(
+        f"  TOPLAM: resim={total_images}, label={total_labels}, "
+        f"kutu={total_boxes}, negatif={total_empty}"
+    )
+
+    # Final label-format check: every YOLO detection row must contain
+    # exactly five whitespace-separated values:
+    # class_id x_center y_center width height
+    invalid_column_rows = []
+    for split in SPLITS:
+        labels_dir = layout_paths[split]["labels"]
+        if not labels_dir.is_dir():
+            continue
+
+        for label_path in sorted(labels_dir.glob("*.txt")):
+            try:
+                with label_path.open("r", encoding="utf-8") as handle:
+                    for line_number, raw_line in enumerate(handle, 1):
+                        line = raw_line.strip()
+                        if not line:
+                            continue
+                        column_count = len(line.split())
+                        if column_count != 5:
+                            invalid_column_rows.append(
+                                (split, label_path.name, line_number, column_count)
+                            )
+            except OSError as exc:
+                errors.append(
+                    f"{label_path}: label dosyasi okunamadi: {exc}"
+                )
+
+    if invalid_column_rows:
+        print(
+            "\n  UYARI: 5 sutunlu YOLO label formatina uymayan satirlar:"
+        )
+        for split, label_name, line_number, column_count in invalid_column_rows:
+            print(
+                f"    - {split}/{label_name}:{line_number} "
+                f"-> {column_count} deger (beklenen: 5)"
+            )
+    else:
+        print(
+            "\n  LABEL FORMAT KONTROLU: Tum label satirlari 5 deger iceriyor."
+        )
+
+    # Explicitly explain the two supported layouts and the conversion path.
+    if "images/split + labels/split" in layouts:
+        print(
+            "\n  BILGI: Datasetiniz egitim icin kullanilan "
+            "images/split + labels/split duzenine sahip."
+        )
+    elif "split/images + split/labels" in layouts:
+        print(
+            "\n  UYARI: Datasetiniz split/images + split/labels "
+            "duzeninde."
+        )
+        print(
+            "  Dataseti egitim icin uygun images/split + labels/split "
+            "duzenine cevirmek icin:"
+        )
+        print(
+            "  Ana menu -> Ana dataset yapisini images/split + "
+            "labels/split duzenine cevir"
+        )
+
+    if warnings:
+        print("\n  UYARILAR:")
+        for warning in warnings:
+            print(f"    - {warning}")
+
+    if invalid_column_rows:
+        errors.extend(
+            [
+                f"{split}/{label_name}:{line_number}: "
+                f"{column_count} deger (beklenen: 5)"
+                for split, label_name, line_number, column_count
+                in invalid_column_rows
+            ]
+        )
+
+    if errors:
+        print(
+            f"\n  SONUC: {len(errors)} hata bulundu. "
+            "Dataset egitim icin guvenli kabul edilmemeli."
+        )
+        print("  Ilk hatalar:")
+        for error in errors[:30]:
+            print(f"    - {error}")
+        return summaries
+
+    if total_images != total_labels:
+        print(
+            "\n  SONUC: Resim ve label sayilari esit degil. "
+            "Dataset egitim icin uygun degil."
+        )
+        return summaries
+
+    print(
+        "\n  SONUC: Resim-label eslesmeleri ve YOLO etiketleri "
+        "gecerli gorunuyor."
+    )
     return summaries
 
 
