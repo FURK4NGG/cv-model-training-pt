@@ -19,6 +19,16 @@ import subprocess
 import sys
 
 try:
+    import tkinter as tk
+    from tkinter import ttk
+    from PIL import Image, ImageTk
+except ImportError:
+    tk = None
+    ttk = None
+    Image = None
+    ImageTk = None
+
+try:
     import yaml
     import questionary
     import questionary.prompts.common as questionary_common
@@ -37,6 +47,63 @@ DATA_YAML_NAME = "data.yaml"
 DEFAULT_RATIOS = (80.0, 10.0, 10.0)
 SEED = 42
 CREATE_BACKUP = True
+
+
+def ask_save_backup(purpose, description, default_name):
+    """Ask whether a ZIP backup is wanted BEFORE asking for its filename."""
+    should_save = ask_confirm(
+        f"{description} icin save dosyasi olusturmak ister misiniz?",
+        True,
+    )
+    if not should_save:
+        return False, None
+
+    filename = ask_text(
+        f"{description} icin save dosyasinin adi (ornek: {default_name}.zip):",
+        f"{default_name}.zip",
+    )
+    if not filename:
+        raise ValueError("Save dosyasi adi bos olamaz.")
+    if not filename.lower().endswith(".zip"):
+        filename += ".zip"
+    filename = Path(filename).name
+    if filename in {".", ".."} or any(char in filename for char in '<>:"/\\|?*'):
+        raise ValueError("Gecersiz save dosyasi adi.")
+    return True, filename
+
+
+def create_selected_backup(root, purpose, description, default_name, files=None, include_yaml=True):
+    """Create a user-approved ZIP backup. Returns the ZIP path or None."""
+    should_save, filename = ask_save_backup(purpose, description, default_name)
+    if not should_save:
+        print("Save dosyasi olusturulmadi.")
+        return None
+
+    target = root.parent / filename
+    if target.exists():
+        if not ask_confirm(f"{target} zaten var. Uzerine yazilsin mi?", False):
+            print("Save islemi iptal edildi.")
+            return None
+
+    if files is None:
+        files = []
+        if include_yaml:
+            yml = root / DATA_YAML_NAME
+            if yml.is_file():
+                files.append(yml)
+        files.extend(
+            label
+            for paths in split_dirs(root).values()
+            if paths["labels"].is_dir()
+            for label in sorted(paths["labels"].glob("*.txt"))
+        )
+
+    with ZipFile(target, "w", ZIP_DEFLATED) as archive:
+        for file in files:
+            if file.is_file():
+                archive.write(file, file.relative_to(root))
+    print("Save dosyasi:", target)
+    return target
 
 # Checkbox secili klasorlerinin basinda tam olarak "*" gorunsun.
 questionary_common.INDICATOR_SELECTED = "*"
@@ -336,10 +403,117 @@ def choose_directory(message, start=None):
 
 
 def image_files(folder):
+    """Return images directly in a folder."""
     if not folder.is_dir():
         return []
-    return sorted(p for p in folder.iterdir()
-                  if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS)
+    return sorted(
+        p for p in folder.iterdir()
+        if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
+    )
+
+
+def image_split_dirs(images_root):
+    """Support both images/*.jpg and images/{train,val/valid,test}/*.jpg layouts."""
+    if not images_root.is_dir():
+        return {}
+
+    result = {}
+    for split in ("train", "val", "test"):
+        candidates = [split]
+        if split == "val":
+            candidates.append("valid")
+
+        found = next(
+            (images_root / name for name in candidates
+             if (images_root / name).is_dir()),
+            None,
+        )
+        result[split] = found if found is not None else images_root
+    return result
+
+
+def labels_root_for_images(images_root):
+    """Find the labels root corresponding to an images root."""
+    if not images_root.is_dir():
+        return None
+
+    # Standard sibling layout:
+    # dataset/images/... + dataset/labels/...
+    sibling = images_root.parent / "labels"
+    if sibling.is_dir():
+        return sibling
+
+    # If the selected directory itself is inside images/, use its parent.
+    if images_root.name.casefold() in {"train", "val", "valid", "test"}:
+        parent_images = images_root.parent
+        sibling = parent_images.parent / "labels"
+        if sibling.is_dir():
+            return sibling
+
+    return None
+
+
+def image_label_layout(images_root):
+    """
+    Resolve supported layouts.
+
+    Supported:
+      1) dataset/images + dataset/labels
+      2) dataset/images/{train,val,test} + dataset/labels/{train,val,test}
+      3) dataset/images/{train,valid,test} + dataset/labels/{train,valid,test}
+    """
+    images_root = images_root.resolve()
+
+    split_names = {
+        "train": "train",
+        "val": "val",
+        "test": "test",
+    }
+
+    # If the user selected images/train, images/val, images/valid or images/test,
+    # normalize back to the images root.
+    if images_root.name.casefold() in {"train", "val", "valid", "test"}:
+        parent = images_root.parent
+        if parent.name.casefold() == "images":
+            images_root = parent
+
+    labels_root = labels_root_for_images(images_root)
+    if labels_root is None:
+        raise FileNotFoundError(
+            f"Secilen images dizininin yaninda labels klasoru bulunamadi: {images_root}"
+        )
+
+    image_dirs = image_split_dirs(images_root)
+    label_dirs = {}
+
+    nested = any(
+        image_dirs[split] != images_root
+        for split in ("train", "val", "test")
+    )
+
+    if nested:
+        for split in ("train", "val", "test"):
+            candidate_names = [split]
+            if split == "val":
+                candidate_names.append("valid")
+            label_dir = next(
+                (
+                    labels_root / name
+                    for name in candidate_names
+                    if (labels_root / name).is_dir()
+                ),
+                None,
+            )
+            if label_dir is None:
+                raise FileNotFoundError(
+                    f"{split} icin labels klasoru bulunamadi: {labels_root}"
+                )
+            label_dirs[split] = label_dir
+    else:
+        for split in ("train", "val", "test"):
+            label_dirs[split] = labels_root
+
+    return images_root, labels_root, image_dirs, label_dirs
 
 
 def open_path(path):
@@ -411,6 +585,52 @@ def load_yaml(root, required=True):
     if not mapping or any(not v for v in mapping.values()) or duplicate:
         raise ValueError(f"Bos veya tekrarli class adi: {path}; tekrar={duplicate}")
     return data, mapping, path
+
+
+
+def load_yaml_for_annotation(path):
+    """
+    Load data.yaml for the annotation GUI without rejecting duplicate names.
+
+    The main dataset-management workflow keeps its stricter validation:
+    duplicate class names are still rejected there. Annotation is different:
+    the numeric class ID is the actual identifier, so two IDs with the same
+    display name can still be selected unambiguously in the GUI.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"data.yaml bulunamadi: {path}")
+
+    data = yaml.safe_load(path.read_text(encoding="utf-8-sig")) or {}
+    raw_names = data.get("names")
+
+    if isinstance(raw_names, list):
+        names = {i: str(value).strip() for i, value in enumerate(raw_names)}
+    elif isinstance(raw_names, dict):
+        try:
+            names = {int(i): str(value).strip() for i, value in raw_names.items()}
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"data.yaml icindeki class ID'leri gecersiz: {path}"
+            ) from exc
+    else:
+        raise ValueError(f"data.yaml icinde gecerli names yok: {path}")
+
+    if not names:
+        raise ValueError(f"data.yaml icinde class bulunamadi: {path}")
+
+    invalid_ids = [cid for cid in names if cid < 0]
+    empty_names = [cid for cid, name in names.items() if not name]
+    if invalid_ids:
+        raise ValueError(
+            f"data.yaml icinde negatif class ID var: {invalid_ids}"
+        )
+    if empty_names:
+        raise ValueError(
+            f"data.yaml icinde bos class adi var: {empty_names}"
+        )
+
+    return data, names, path
 
 
 def write_yaml(path, data, names):
@@ -505,8 +725,23 @@ def manifest(root, require_yaml=False, validate_class_ids=True):
 def backup_metadata(root, purpose):
     if not CREATE_BACKUP:
         return None
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    target = root.parent / f"{root.name}_{purpose}_backup_{stamp}.zip"
+
+    default_name = f"{root.name}_{purpose}_backup"
+    should_save, filename = ask_save_backup(
+        purpose,
+        f"{root.name} datasetindeki mevcut dosyalarin yedegi",
+        default_name,
+    )
+    if not should_save:
+        print("Save dosyasi olusturulmadi.")
+        return None
+
+    target = root.parent / filename
+    if target.exists():
+        if not ask_confirm(f"{target} zaten var. Uzerine yazilsin mi?", False):
+            print("Save islemi iptal edildi.")
+            return None
+
     yml = root / DATA_YAML_NAME
     files = ([yml] if yml.is_file() else []) + [
         label
@@ -514,15 +749,17 @@ def backup_metadata(root, purpose):
         if paths["labels"].is_dir()
         for label in sorted(paths["labels"].glob("*.txt"))
     ]
+
     with ZipFile(target, "w", ZIP_DEFLATED) as archive:
-        show_progress("Yedekleme", 0, len(files), f"0/{len(files)} dosya")
+        show_progress("Save olusturma", 0, len(files), f"0/{len(files)} dosya")
         for index, file in enumerate(files, 1):
             archive.write(file, file.relative_to(root))
             if index == len(files) or index % max(1, len(files) // 100) == 0:
                 show_progress(
-                    "Yedekleme", index, len(files), f"{index}/{len(files)} dosya",
+                    "Save olusturma", index, len(files), f"{index}/{len(files)} dosya",
                     finish=index == len(files),
                 )
+    print("Save dosyasi:", target)
     return target
 
 
@@ -633,24 +870,114 @@ def merge_classes_within_dataset(root, data, names, yaml_path):
 
 
 def force_all_labels_to_class_id(root, data, names, yaml_path):
+    """
+    Butun dolu label satirlarinin class ID'sini tek bir hedef ID'ye cevirir.
+
+    Hedef iki sekilde secilebilir:
+      1) data.yaml icindeki mevcut class'lardan biri
+      2) Kullanicinin kendi belirledigi yeni bir class ID
+
+    Yeni bir ID girildiginde kullaniciya bunun data.yaml'a da eklenip
+    eklenmeyecegi ayrica sorulur. Hayir denirse mevcut data.yaml korunur.
+    """
+
+    created_new_class = False
+
     if names:
+        target_choice = ask_select(
+            "Butun dolu label satirlari hangi hedef class'a donusturulsun?",
+            [
+                questionary.Choice(
+                    "data.yaml icindeki bir class'i sec",
+                    "yaml_class",
+                ),
+                questionary.Choice(
+                    "Yeni class ID'sini kendin belirle",
+                    "new_id",
+                ),
+            ],
+        )
+    else:
+        print(
+            "data.yaml icinde secilebilecek class bulunamadi; "
+            "yeni class ID'sini kendiniz belirlemelisiniz."
+        )
+        target_choice = "new_id"
+
+    if target_choice == "yaml_class":
         new_id = ask_select(
-            "Butun dolu label satirlari hangi class'a donusturulsun?",
-            [questionary.Choice(f"{cid}: {names[cid]}", cid) for cid in sorted(names)],
+            "data.yaml icindeki hedef class'i secin:",
+            [
+                questionary.Choice(
+                    f"{cid}: {names[cid]}",
+                    cid,
+                )
+                for cid in sorted(names)
+            ],
         )
         target_name = names[new_id]
+
     else:
-        print("data.yaml icinde secilebilecek class bulunamadi; hedefi elle girmeniz gerekiyor.")
-        raw_id = ask_text("Butun dolu label satirlarinin yeni class ID degeri:")
+        raw_id = ask_text(
+            "Yeni class ID'sini girin (0 veya daha buyuk bir tam sayi):"
+        )
         try:
             new_id = int(raw_id)
         except ValueError as exc:
-            raise ValueError("Class ID, 0 veya daha buyuk bir tam sayi olmalidir.") from exc
+            raise ValueError(
+                "Class ID, 0 veya daha buyuk bir tam sayi olmalidir."
+            ) from exc
+
         if new_id < 0:
             raise ValueError("Class ID negatif olamaz.")
-        target_name = ask_text("Bu hedef ID'nin class adi:")
+
+        if new_id in names:
+            raise ValueError(
+                f"{new_id} ID'si zaten data.yaml icinde mevcut: "
+                f"{names[new_id]}. Mevcut class'i secmek icin "
+                "onceki menuden 'data.yaml icindeki bir class'i sec' secenegini kullanin."
+            )
+
+        target_name = ask_text(
+            "Yeni class'in adini girin (data.yaml'a yazilacaksa kullanilir):"
+        )
         if not target_name:
-            raise ValueError("Hedef class adi bos olamaz.")
+            raise ValueError("Class adi bos olamaz.")
+
+        # Ayni isimde baska bir class varsa yeni bir class adi olusturmak
+        # data.yaml acisindan anlamsiz olur.
+        normalized_target = normalized_name(target_name)
+        duplicate_name = next(
+            (
+                cid
+                for cid, name in names.items()
+                if normalized_name(name) == normalized_target
+            ),
+            None,
+        )
+
+        if duplicate_name is not None and duplicate_name != new_id:
+            # Ayni class adi baska bir ID'de varsa HATA VERME.
+            # Kullaniciya sor ve onaylarsa eski ID'yi data.yaml'dan kaldir.
+            overwrite_name = ask_confirm(
+                f"'{target_name}' adi data.yaml icinde zaten "
+                f"{duplicate_name} ID'sinde kullaniliyor. "
+                f"{new_id} ID'sine tasinmasina ve eski {duplicate_name} ID'sinin "
+                "data.yaml'dan kaldirilmasina izin veriyor musunuz?",
+                False,
+            )
+
+            if not overwrite_name:
+                raise ValueError(
+                    f"'{target_name}' adi zaten {duplicate_name} ID'sinde kullaniliyor; "
+                    "islem iptal edildi."
+                )
+
+            names = dict(names)
+            del names[duplicate_name]
+
+        created_new_class = True
+
     if new_id != 0:
         print(
             "UYARI: Tek class'li bir datasetin egitim ID'si normalde 0 olmalidir. "
@@ -665,13 +992,19 @@ def force_all_labels_to_class_id(root, data, names, yaml_path):
     plans = []
     box_count = empty_count = already_correct = 0
     old_id_counts = Counter()
+
     for pair in pairs:
         lines, counts = parse_label(pair.label, known_ids=None)
         old_id_counts.update(counts)
         box_count += len(lines)
         empty_count += int(not lines)
-        new_text = rewrite_label(lines, {old_id: new_id for old_id in counts})
+
+        new_text = rewrite_label(
+            lines,
+            {old_id: new_id for old_id in counts},
+        )
         old_text = pair.label.read_text(encoding="utf-8-sig")
+
         if new_text != old_text:
             plans.append((pair.label, new_text))
         else:
@@ -680,31 +1013,115 @@ def force_all_labels_to_class_id(root, data, names, yaml_path):
     print("\nToplu class ID degistirme plani:")
     for old_id in sorted(old_id_counts):
         old_name = names.get(old_id, "<data.yaml'da tanimli degil>")
-        print(f"  {old_id}:{old_name} -> {new_id}:{target_name} (kutu={old_id_counts[old_id]})")
+        print(
+            f"  {old_id}:{old_name} -> "
+            f"{new_id}:{target_name} "
+            f"(kutu={old_id_counts[old_id]})"
+        )
+
     print(
         f"Toplam kutu={box_count}, degisecek label={len(plans)}, "
-        f"zaten dogru dolu label={already_correct}, bos/negatif label={empty_count}"
+        f"zaten dogru dolu label={already_correct}, "
+        f"bos/negatif label={empty_count}"
     )
-    if not ask_confirm("Butun dolu label class ID'leri degistirilsin mi?", False):
+
+    if created_new_class:
+        print(
+            f"\nYeni class:"
+            f"\n  ID   : {new_id}"
+            f"\n  Ad   : {target_name}"
+        )
+
+        update_yaml = ask_confirm(
+            "Bu yeni class ID'si data.yaml icine de islenmesini ister misiniz?",
+            True,
+        )
+    else:
+        # Mevcut bir data.yaml class'i secildiginde YAML zaten o class'i
+        # tanimladigi icin ekstra bir class ekleme islemi gerekmez.
+        update_yaml = False
+
+    if not ask_confirm(
+        "Butun dolu label class ID'leri degistirilsin mi?",
+        False,
+    ):
         print("Degisiklik yapilmadi.")
         return
 
     backup = backup_metadata(root, "class_id")
     if backup:
         print("Label/YAML yedegi:", backup)
-    show_progress("Label ID degistirme", 0, len(plans), f"0/{len(plans)} label")
+
+    show_progress(
+        "Label ID degistirme",
+        0,
+        len(plans),
+        f"0/{len(plans)} label",
+    )
+
     for index, (label, text) in enumerate(plans, 1):
         label.write_text(text, encoding="utf-8")
-        if index == len(plans) or index % max(1, len(plans) // 100) == 0:
+
+        if (
+            index == len(plans)
+            or index % max(1, len(plans) // 100) == 0
+        ):
             show_progress(
-                "Label ID degistirme", index, len(plans), f"{index}/{len(plans)} label",
+                "Label ID degistirme",
+                index,
+                len(plans),
+                f"{index}/{len(plans)} label",
                 finish=index == len(plans),
             )
-    write_yaml(yaml_path, data, {new_id: target_name})
-    validate_dataset(root, interactive=False, require_yaml=True)
+
+    if update_yaml:
+        # Mevcut data.yaml'daki class'lari koru ve yeni ID'yi sona eklemek
+        # yerine kullanicinin verdigi ID'ye dogrudan yerlestir.
+        updated_names = dict(names)
+        updated_names[new_id] = target_name
+
+        write_yaml(
+            yaml_path,
+            data,
+            updated_names,
+        )
+
+        print(
+            f"data.yaml guncellendi: "
+            f"{new_id}: {target_name}"
+        )
+    else:
+        if created_new_class:
+            print(
+                "data.yaml degistirilmedi. "
+                f"Yeni ID {new_id} label dosyalarina yazildi fakat "
+                "data.yaml'a eklenmedi."
+            )
+        else:
+            print(
+                "Mevcut data.yaml class'i kullanildi; "
+                "data.yaml'da ek degisiklik yapilmadi."
+            )
+
+    # Yeni ID data.yaml'a yazilmadiysa validate_dataset() bunu
+    # bilinmeyen class ID olarak reddeder. Bu durumda yalnızca label
+    # formatini ve koordinatlarini kontrol et.
+    if update_yaml or not created_new_class:
+        validate_dataset(
+            root,
+            interactive=False,
+            require_yaml=True,
+        )
+    else:
+        manifest(
+            root,
+            require_yaml=False,
+            validate_class_ids=False,
+        )
+
     print(
-        f"Toplu class ID degistirme tamamlandi. Butun dolu kutular: "
-        f"{new_id}:{target_name}"
+        f"Toplu class ID degistirme tamamlandi. "
+        f"Butun dolu kutular: {new_id}:{target_name}"
     )
 
 
@@ -996,6 +1413,938 @@ def extract_or_delete_class_pairs(root, data, names):
     print(f"Kopyalama tamamlandi: cift={total}, kutu={copied_boxes}, hedef={destination}")
 
 
+
+def annotate_images_with_boxes():
+    """
+    GUI ile YOLO bounding-box annotation yap.
+
+    - Secilen images klasorundeki resimleri tek tek gosterir.
+    - Mevcut .txt label varsa kutulari okur ve class renkleriyle gosterir.
+    - Fare ile tutup surukleyerek yeni dikdortgen/kare cizilir.
+    - Ustte data.yaml'dan bulunan class'lardan biri secilir.
+    - Her class icin farkli bir renk kullanilir.
+    - Save ile mevcut label dosyasi yeniden yazilir; label yoksa olusturulur.
+    """
+    if tk is None or Image is None:
+        raise RuntimeError(
+            "GUI icin Pillow ve Tkinter gerekli. "
+            "Kurulum: python -m pip install Pillow"
+        )
+
+    selected_path = choose_directory(
+        "Kutu etiketlenecek resimlerin bulundugu klasoru secin:",
+        BASE_DIRECTORY,
+    ).resolve()
+
+    selected_name = selected_path.name.casefold()
+
+    if selected_name == "images":
+        images_dir = selected_path
+        labels_dir = selected_path.parent / "labels"
+
+    elif selected_name in {"train", "val", "valid", "test"}:
+        split_name = "val" if selected_name == "valid" else selected_name
+        images_candidate = selected_path / "images"
+        labels_candidate = selected_path / "labels"
+
+        if images_candidate.is_dir():
+            images_dir = images_candidate
+            labels_dir = labels_candidate
+        else:
+            direct_images = [
+                p for p in selected_path.iterdir()
+                if p.is_file() and p.suffix.casefold() in IMAGE_EXTENSIONS
+            ]
+            if direct_images:
+                images_dir = selected_path
+                labels_dir = selected_path.parent / "labels"
+            else:
+                raise ValueError(
+                    "Secilen split klasorunde images klasoru veya resim bulunamadi: "
+                    f"{selected_path}"
+                )
+
+    elif selected_name == "labels":
+        raise ValueError(
+            "Label klasoru secildi. Annotation icin images klasorunu secin."
+        )
+
+    else:
+        direct_images = [
+            p for p in selected_path.iterdir()
+            if p.is_file() and p.suffix.casefold() in IMAGE_EXTENSIONS
+        ]
+
+        if direct_images:
+            images_dir = selected_path
+            if selected_path.parent.name.casefold() == "images":
+                labels_dir = selected_path.parent.parent / "labels"
+            else:
+                labels_dir = selected_path.parent / "labels"
+        else:
+            # Standard YOLO dataset root:
+            # dataset/train/images + dataset/train/labels
+            # dataset/val/images + dataset/val/labels
+            # dataset/test/images + dataset/test/labels
+            candidates = []
+
+            for split in SPLITS:
+                candidate = selected_path / split / "images"
+                if candidate.is_dir():
+                    candidates.append((split, candidate))
+
+            valid_candidate = selected_path / "valid" / "images"
+            if valid_candidate.is_dir():
+                candidates.append(("val", valid_candidate))
+
+            if not candidates:
+                raise ValueError(
+                    "Secilen klasorde desteklenen resim veya YOLO split yapisi "
+                    "bulunamadi: "
+                    f"{selected_path}"
+                )
+
+            if len(candidates) == 1:
+                split_name, images_dir = candidates[0]
+            else:
+                split_name = ask_select(
+                    "Hangi split'i annotate etmek istiyorsunuz?",
+                    [
+                        questionary.Choice(
+                            f"{split}: {candidate}",
+                            split,
+                        )
+                        for split, candidate in candidates
+                    ],
+                )
+                images_dir = dict(candidates)[split_name]
+
+            labels_dir = selected_path / split_name / "labels"
+            if not labels_dir.is_dir():
+                alternative_labels = selected_path / "labels" / split_name
+                if alternative_labels.is_dir():
+                    labels_dir = alternative_labels
+
+    images_dir = images_dir.resolve()
+    labels_dir = labels_dir.resolve()
+
+    if (
+        images_dir.parent.name.casefold() in SPLITS
+        and images_dir.parent.parent.is_dir()
+    ):
+        dataset_root = images_dir.parent.parent
+    else:
+        dataset_root = images_dir.parent
+
+    if not images_dir.is_dir():
+        raise FileNotFoundError(
+            f"Resim klasoru bulunamadi: {images_dir}"
+        )
+
+    # The selected directory may be a dataset root, a split directory, an
+    # images directory, or a directory containing images directly. Resolve
+    # the final images/labels pair solely from its filesystem structure.
+    images_dir = images_dir.resolve()
+    labels_dir = labels_dir.resolve()
+
+    images = image_files(images_dir)
+    if not images:
+        raise FileNotFoundError(
+            f"Secilen dizinde desteklenen resim bulunamadi: {images_dir}"
+        )
+
+    # data.yaml'i once secilen dizinde, sonra bir ust dizinde ara.
+    yaml_candidates = [
+        images_dir / DATA_YAML_NAME,
+        images_dir.parent / DATA_YAML_NAME,
+        dataset_root / DATA_YAML_NAME,
+        dataset_root.parent / DATA_YAML_NAME,
+    ]
+    print(
+        "Annotation paths resolved:",
+        f"\\n  Images: {images_dir}",
+        f"\\n  Labels: {labels_dir}",
+        f"\\n  Dataset root: {dataset_root}",
+        f"\\n  YAML candidates: {yaml_candidates}",
+    )
+
+    yaml_path = next((p for p in yaml_candidates if p.is_file()), None)
+    if yaml_path is None:
+        raise FileNotFoundError(
+            "Class listesi icin data.yaml bulunamadi. Aranan yerler:\n"
+            + "\n".join(f"  {p}" for p in yaml_candidates)
+        )
+
+    yaml_root = yaml_path.parent
+    data, names, _ = load_yaml_for_annotation(yaml_path)
+    if not names:
+        raise ValueError(f"data.yaml icinde class bulunamadi: {yaml_path}")
+
+    # Label klasoru yoksa annotation sirasinda olusturulabilir.
+    labels_dir.mkdir(parents=True, exist_ok=True)
+
+    # HSV renkleri: class sayisi ne olursa olsun renkler birbirinden ayrilsin.
+    import colorsys
+
+    # Automatically choose visually distinct, high-contrast colors.
+    # We deliberately avoid adjacent hues so neighboring classes are not
+    # easily confused. The palette is generated from a large set of
+    # perceptually separated HSV positions and then rotated according to
+    # the class order.
+    names = {
+        int(class_id): str(class_name)
+        for class_id, class_name in names.items()
+    }
+    ordered_ids = sorted(names)
+
+    def build_distinct_class_colors(class_ids):
+        palette = [
+            (230, 25, 75),    # red
+            (60, 180, 75),    # green
+            (0, 130, 200),   # blue
+            (245, 130, 48),   # orange
+            (145, 30, 180),   # purple
+            (70, 240, 240),  # cyan
+            (240, 50, 230),  # magenta
+            (210, 245, 60),  # lime/yellow
+            (250, 190, 190), # light red
+            (170, 110, 40),  # brown
+            (0, 128, 128),   # teal
+            (128, 0, 0),     # dark red
+            (0, 0, 128),     # dark blue
+            (128, 128, 0),   # olive
+            (0, 128, 0),     # dark green
+            (128, 0, 128),   # dark purple
+        ]
+
+        colors = {}
+        for index, class_id in enumerate(class_ids):
+            if index < len(palette):
+                colors[class_id] = palette[index]
+                continue
+
+            # For additional classes, generate a hue that is deliberately
+            # separated from the already-used colors.
+            hue = ((index - len(palette) + 1) * 0.61803398875) % 1.0
+            rgb = colorsys.hsv_to_rgb(hue, 0.88, 0.95)
+            colors[class_id] = tuple(
+                int(channel * 255) for channel in rgb
+            )
+
+        return colors
+
+    class_colors = build_distinct_class_colors(ordered_ids)
+
+    def rgb_hex(rgb):
+        return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+    def find_label_for_image(image):
+        return labels_dir / f"{image.stem}.txt"
+
+    def read_boxes(label_path):
+        boxes = []
+        if not label_path.is_file():
+            return boxes
+
+        try:
+            for line_no, raw in enumerate(
+                label_path.read_text(encoding="utf-8-sig").splitlines(), 1
+            ):
+                parts = raw.strip().split()
+                if len(parts) != 5:
+                    # Bu annotation ekraninda sadece standart YOLO bbox
+                    # satirlari gosterilir; polygonlar degistirilmeden kalir.
+                    continue
+                try:
+                    class_id = int(parts[0])
+                    cx, cy, bw, bh = map(float, parts[1:5])
+                except ValueError:
+                    continue
+                if class_id not in names:
+                    continue
+                if not all(0.0 <= v <= 1.0 for v in (cx, cy, bw, bh)):
+                    continue
+                if bw <= 0 or bh <= 0:
+                    continue
+                boxes.append({
+                    "class_id": class_id,
+                    "cx": cx,
+                    "cy": cy,
+                    "w": bw,
+                    "h": bh,
+                })
+        except OSError:
+            pass
+        return boxes
+
+    root = tk.Tk()
+    root.title("YOLO Box Annotation")
+    root.geometry("1250x900")
+    root.minsize(950, 700)
+
+    style = ttk.Style(root)
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass
+
+    state = {
+        "index": 0,
+        "image": None,
+        "photo": None,
+        "original_size": None,
+        "display_size": None,
+        "display_origin": None,
+        "boxes": [],
+        "dirty": False,
+        "drag_start": None,
+        "drag_rect": None,
+        "selected_box": None,
+        "closed": False,
+    }
+
+    # ----------------------------- UI -----------------------------
+    top = ttk.Frame(root, padding=10)
+    top.pack(fill="x")
+
+    ttk.Label(
+        top,
+        text="Class:",
+        font=("TkDefaultFont", 11, "bold"),
+    ).pack(side="left")
+
+    class_var = tk.StringVar(value=f"{ordered_ids[0]}: {names[ordered_ids[0]]}")
+    class_values = [
+        f"{class_id}: {names[class_id]}"
+        for class_id in ordered_ids
+    ]
+    class_combo = ttk.Combobox(
+        top,
+        textvariable=class_var,
+        values=class_values,
+        state="readonly",
+        width=max(25, min(55, max(len(v) for v in class_values) + 2)),
+    )
+    class_combo.pack(side="left", padx=(8, 14))
+
+    color_canvas = tk.Canvas(
+        top,
+        width=28,
+        height=28,
+        highlightthickness=1,
+        highlightbackground="#666666",
+    )
+    color_canvas.pack(side="left", padx=(0, 14))
+
+    image_info_var = tk.StringVar()
+    image_info = ttk.Label(
+        top,
+        textvariable=image_info_var,
+        font=("TkDefaultFont", 10, "bold"),
+    )
+    image_info.pack(side="left", padx=(8, 0))
+
+    dirty_var = tk.StringVar()
+    ttk.Label(
+        top,
+        textvariable=dirty_var,
+        foreground="#cc7700",
+    ).pack(side="right")
+
+    viewer_frame = ttk.Frame(root, padding=(10, 0, 10, 8))
+    viewer_frame.pack(fill="both", expand=True)
+
+    canvas = tk.Canvas(
+        viewer_frame,
+        background="#202020",
+        highlightthickness=1,
+        highlightbackground="#666666",
+        takefocus=True,
+    )
+    canvas.pack(fill="both", expand=True)
+
+    bottom = ttk.Frame(root, padding=10)
+    bottom.pack(fill="x")
+
+    legend_frame = ttk.Frame(bottom)
+    legend_frame.pack(fill="x", pady=(0, 7))
+
+    ttk.Label(
+        legend_frame,
+        text="Class renkleri:",
+        font=("TkDefaultFont", 9, "bold"),
+    ).pack(side="left", padx=(0, 8))
+
+    legend_widgets = []
+    for class_id in ordered_ids:
+        item = ttk.Frame(legend_frame)
+        item.pack(side="left", padx=(0, 12))
+        swatch = tk.Canvas(
+            item,
+            width=15,
+            height=15,
+            highlightthickness=0,
+        )
+        swatch.create_rectangle(
+            1, 1, 14, 14,
+            fill=rgb_hex(class_colors[class_id]),
+            outline="",
+        )
+        swatch.pack(side="left")
+        ttk.Label(
+            item,
+            text=f" {class_id}: {names[class_id]}",
+        ).pack(side="left")
+
+    hint_var = tk.StringVar(
+        value=(
+            "Fare: kutu ciz | Mouse ile mevcut kutuya tikla: sec | "
+            "Delete: secili kutuyu sil | ←/→: resim | Ctrl+S: kaydet | "
+            "Enter: kaydet ve sonraki | Esc: cik"
+        )
+    )
+    ttk.Label(
+        bottom,
+        textvariable=hint_var,
+        foreground="#666666",
+    ).pack(fill="x", pady=(0, 8))
+
+    button_row = ttk.Frame(bottom)
+    button_row.pack(fill="x")
+
+    previous_button = ttk.Button(button_row, text="← Onceki")
+    previous_button.pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+    save_button = ttk.Button(button_row, text="Kaydet")
+    save_button.pack(side="left", fill="x", expand=True, padx=4)
+
+    next_button = ttk.Button(button_row, text="Sonraki →")
+    next_button.pack(side="left", fill="x", expand=True, padx=4)
+
+    save_next_button = ttk.Button(button_row, text="Kaydet ve Sonraki")
+    save_next_button.pack(side="left", fill="x", expand=True, padx=4)
+
+    finish_button = ttk.Button(button_row, text="Cik")
+    finish_button.pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+    status_var = tk.StringVar()
+    ttk.Label(
+        bottom,
+        textvariable=status_var,
+        foreground="#555555",
+    ).pack(fill="x", pady=(7, 0))
+
+    # ------------------------- helpers -------------------------
+    def selected_class_id():
+        value = class_var.get().split(":", 1)[0].strip()
+        try:
+            class_id = int(value)
+        except ValueError:
+            class_id = int(ordered_ids[0])
+
+        if class_id not in names:
+            raise ValueError(
+                f"data.yaml icinde secilen class ID bulunamadi: {class_id}"
+            )
+
+        if class_id not in class_colors:
+            # This should never be needed after normalization, but keep the
+            # GUI fail-safe: every valid class ID must always have a color.
+            fallback_index = ordered_ids.index(class_id)
+            hue = (fallback_index * 0.61803398875) % 1.0
+            rgb = colorsys.hsv_to_rgb(hue, 0.88, 0.95)
+            class_colors[class_id] = tuple(
+                int(channel * 255) for channel in rgb
+            )
+
+        return class_id
+
+    def update_color_indicator():
+        class_id = selected_class_id()
+        color = rgb_hex(class_colors[class_id])
+        color_canvas.delete("all")
+        color_canvas.create_rectangle(
+            1, 1, 27, 27,
+            fill=color,
+            outline="",
+        )
+
+    def update_dirty():
+        dirty_var.set("* Kaydedilmemis degisiklik" if state["dirty"] else "")
+
+    def canvas_to_image(x, y):
+        if not state["display_size"] or not state["display_origin"]:
+            return None
+        ox, oy = state["display_origin"]
+        dw, dh = state["display_size"]
+        if dw <= 0 or dh <= 0:
+            return None
+
+        # Canvas koordinatini resmin 0..1 normalize edilmis koordinatina cevir.
+        nx = (x - ox) / dw
+        ny = (y - oy) / dh
+        if not (0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0):
+            return None
+        return nx, ny
+
+    def image_to_canvas(box):
+        if not state["display_size"] or not state["display_origin"]:
+            return None
+        ox, oy = state["display_origin"]
+        dw, dh = state["display_size"]
+
+        x1 = ox + (box["cx"] - box["w"] / 2) * dw
+        y1 = oy + (box["cy"] - box["h"] / 2) * dh
+        x2 = ox + (box["cx"] + box["w"] / 2) * dw
+        y2 = oy + (box["cy"] + box["h"] / 2) * dh
+        return x1, y1, x2, y2
+
+    def draw_all():
+        canvas.delete("all")
+        if state["photo"] is None:
+            return
+
+        ox, oy = state["display_origin"]
+        dw, dh = state["display_size"]
+        canvas.create_image(
+            ox + dw / 2,
+            oy + dh / 2,
+            image=state["photo"],
+            anchor="center",
+            tags="image",
+        )
+
+        # Once kutular ve yeni kutular class'a gore farkli renkte cizilir.
+        for index, box in enumerate(state["boxes"]):
+            coords = image_to_canvas(box)
+            if coords is None:
+                continue
+
+            x1, y1, x2, y2 = coords
+            class_id = box["class_id"]
+            color = rgb_hex(class_colors[class_id])
+            selected = state["selected_box"] == index
+
+            canvas.create_rectangle(
+                x1, y1, x2, y2,
+                outline="#ffffff" if selected else color,
+                width=5 if selected else 3,
+                tags=("box", f"box_{index}"),
+            )
+
+            # Class yazisini kutunun sol ustune koy.
+            label_text = f"{class_id}: {names[class_id]}"
+            text_id = canvas.create_text(
+                x1 + 5,
+                max(5, y1 + 5),
+                text=label_text,
+                anchor="nw",
+                fill="#ffffff",
+                font=("TkDefaultFont", 10, "bold"),
+                tags=("box", f"box_{index}"),
+            )
+
+            # Okunurluk icin yazi arkasina ayni renk bir dikdortgen.
+            bbox = canvas.bbox(text_id)
+            if bbox:
+                background = canvas.create_rectangle(
+                    bbox[0] - 2, bbox[1] - 1,
+                    bbox[2] + 2, bbox[3] + 1,
+                    fill=color,
+                    outline="",
+                    tags=("box", f"box_{index}"),
+                )
+                canvas.tag_lower(background, text_id)
+
+        update_dirty()
+
+    def load_current():
+        image = images[state["index"]]
+        label = find_label_for_image(image)
+
+        try:
+            with Image.open(image) as im:
+                original = im.convert("RGB")
+                original_size = original.size
+
+            # Canvas boyutunun hazir olmasi icin once update_idletasks.
+            root.update_idletasks()
+            max_w = max(300, canvas.winfo_width() - 30)
+            max_h = max(250, canvas.winfo_height() - 30)
+
+            display = original.copy()
+            display.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+
+            state["image"] = image
+            state["original_size"] = original_size
+            state["display_size"] = display.size
+            state["photo"] = ImageTk.PhotoImage(display)
+
+            ox = (canvas.winfo_width() - display.size[0]) / 2
+            oy = (canvas.winfo_height() - display.size[1]) / 2
+            state["display_origin"] = (ox, oy)
+
+            state["boxes"] = read_boxes(label)
+            state["selected_box"] = None
+            state["drag_start"] = None
+            state["drag_rect"] = None
+            state["dirty"] = False
+
+            image_info_var.set(
+                f"{state['index'] + 1}/{len(images)}  |  "
+                f"{image.name}  |  {original_size[0]}x{original_size[1]}  |  "
+                f"Box: {len(state['boxes'])}"
+            )
+            status_var.set(
+                f"Label: {label if label.is_file() else 'yok (Kaydet ile olusturulacak)'}"
+            )
+            update_color_indicator()
+            draw_all()
+        except Exception as exc:
+            state["image"] = image
+            state["photo"] = None
+            state["boxes"] = []
+            state["dirty"] = False
+            canvas.delete("all")
+            canvas.create_text(
+                20, 20,
+                anchor="nw",
+                fill="white",
+                text=f"Resim acilamadi:\n{image}\n\n{exc}",
+            )
+            status_var.set(f"HATA: {exc}")
+
+    def save_current():
+        image = images[state["index"]]
+        label = find_label_for_image(image)
+
+        # Sadece standart YOLO bbox'lari yaziyoruz.
+        lines = []
+        for box in state["boxes"]:
+            lines.append(
+                f"{box['class_id']} "
+                f"{box['cx']:.6f} "
+                f"{box['cy']:.6f} "
+                f"{box['w']:.6f} "
+                f"{box['h']:.6f}"
+            )
+
+        label.parent.mkdir(parents=True, exist_ok=True)
+        label.write_text(
+            "\n".join(lines) + ("\n" if lines else ""),
+            encoding="utf-8",
+        )
+        state["dirty"] = False
+        status_var.set(f"Kaydedildi: {label}")
+        image_info_var.set(
+            f"{state['index'] + 1}/{len(images)}  |  "
+            f"{image.name}  |  {state['original_size'][0]}x{state['original_size'][1]}  |  "
+            f"Box: {len(state['boxes'])}"
+        )
+        update_dirty()
+
+    def ensure_saved_before_navigation():
+        if not state["dirty"]:
+            return True
+
+        answer = questionary.confirm(
+            "Mevcut resimde kaydedilmemis kutular var. Kaydetmeden gecilsin mi?",
+            default=False,
+        ).ask()
+        if answer is None:
+            return False
+        if answer:
+            return True
+
+        save_current()
+        return True
+
+    def move(delta, save_if_dirty=False):
+        if state["dirty"]:
+            if save_if_dirty:
+                save_current()
+            elif not ensure_saved_before_navigation():
+                return
+
+        new_index = state["index"] + delta
+        if 0 <= new_index < len(images):
+            state["index"] = new_index
+            load_current()
+
+    # ----------------------- mouse drawing -----------------------
+    def on_mouse_down(event):
+        canvas.focus_set()
+
+        # Mevcut bir kutuya tiklanmissa onu sec.
+        hits = canvas.find_overlapping(event.x, event.y, event.x, event.y)
+        hit_indices = []
+        for item_id in hits:
+            tags = canvas.gettags(item_id)
+            for tag in tags:
+                if tag.startswith("box_"):
+                    try:
+                        hit_indices.append(int(tag.split("_", 1)[1]))
+                    except ValueError:
+                        pass
+
+        if hit_indices:
+            state["selected_box"] = hit_indices[-1]
+            draw_all()
+            status_var.set(
+                "Mevcut kutu secildi. Silmek icin Delete, yeniden class vermek icin "
+                "ustteki class'i secip R tusuna basin."
+            )
+            return
+
+        point = canvas_to_image(event.x, event.y)
+        if point is None:
+            return
+
+        state["selected_box"] = None
+        state["drag_start"] = point
+        if state["drag_rect"] is not None:
+            canvas.delete(state["drag_rect"])
+            state["drag_rect"] = None
+
+    def on_mouse_move(event):
+        start = state["drag_start"]
+        current = canvas_to_image(event.x, event.y)
+        if start is None or current is None:
+            return
+
+        # Sadece resim alaninda ciz.
+        x1n, y1n = start
+        x2n, y2n = current
+        x1 = min(x1n, x2n)
+        y1 = min(y1n, y2n)
+        x2 = max(x1n, x2n)
+        y2 = max(y1n, y2n)
+
+        ox, oy = state["display_origin"]
+        dw, dh = state["display_size"]
+        cx1 = ox + x1 * dw
+        cy1 = oy + y1 * dh
+        cx2 = ox + x2 * dw
+        cy2 = oy + y2 * dh
+
+        if state["drag_rect"] is not None:
+            canvas.delete(state["drag_rect"])
+
+        class_id = selected_class_id()
+        color = rgb_hex(class_colors[class_id])
+        state["drag_rect"] = canvas.create_rectangle(
+            cx1, cy1, cx2, cy2,
+            outline=color,
+            width=3,
+            dash=(7, 4),
+        )
+
+    def on_mouse_up(event):
+        start = state["drag_start"]
+        current = canvas_to_image(event.x, event.y)
+        state["drag_start"] = None
+
+        if start is None or current is None:
+            if state["drag_rect"] is not None:
+                canvas.delete(state["drag_rect"])
+                state["drag_rect"] = None
+            return
+
+        x1n, y1n = start
+        x2n, y2n = current
+        x1 = max(0.0, min(1.0, min(x1n, x2n)))
+        y1 = max(0.0, min(1.0, min(y1n, y2n)))
+        x2 = max(0.0, min(1.0, max(x1n, x2n)))
+        y2 = max(0.0, min(1.0, max(y1n, y2n)))
+
+        if state["drag_rect"] is not None:
+            canvas.delete(state["drag_rect"])
+            state["drag_rect"] = None
+
+        # Tiklama kadar kucuk kutular kazara olusmasin.
+        if (x2 - x1) < 0.005 or (y2 - y1) < 0.005:
+            return
+
+        class_id = selected_class_id()
+        state["boxes"].append({
+            "class_id": class_id,
+            "cx": (x1 + x2) / 2.0,
+            "cy": (y1 + y2) / 2.0,
+            "w": x2 - x1,
+            "h": y2 - y1,
+        })
+        state["selected_box"] = len(state["boxes"]) - 1
+        state["dirty"] = True
+        status_var.set(
+            f"Yeni box eklendi: {class_id}: {names[class_id]}. "
+            "Kaydetmek icin Ctrl+S veya Kaydet butonunu kullanin."
+        )
+        draw_all()
+
+    def delete_selected_box():
+        index = state["selected_box"]
+        if index is None or not (0 <= index < len(state["boxes"])):
+            status_var.set("Silinecek secili box yok.")
+            return
+        deleted = state["boxes"].pop(index)
+        state["selected_box"] = None
+        state["dirty"] = True
+        status_var.set(
+            f"Box silindi: {deleted['class_id']}: {names[deleted['class_id']]}. "
+            "Degisiklik henuz kaydedilmedi."
+        )
+        draw_all()
+
+    def reclass_selected_box():
+        index = state["selected_box"]
+        if index is None or not (0 <= index < len(state["boxes"])):
+            status_var.set("Class'i degistirilecek secili box yok.")
+            return
+        old_id = state["boxes"][index]["class_id"]
+        new_id = selected_class_id()
+        state["boxes"][index]["class_id"] = new_id
+        state["dirty"] = True
+        status_var.set(
+            f"Box class'i degistirildi: {old_id}:{names[old_id]} -> "
+            f"{new_id}:{names[new_id]}. Kaydedilmedi."
+        )
+        draw_all()
+
+    def finish():
+        if state["dirty"]:
+            save_current()
+        state["closed"] = True
+        root.quit()
+
+    def cancel():
+        state["closed"] = True
+        root.quit()
+
+    def on_class_changed(_event=None):
+        update_color_indicator()
+        status_var.set(
+            f"Yeni cizilecek box class'i: {selected_class_id()}: "
+            f"{names[selected_class_id()]}"
+        )
+
+    def on_key(event):
+        if event.keysym == "Left":
+            move(-1)
+            return "break"
+        if event.keysym == "Right":
+            move(1)
+            return "break"
+        if event.keysym == "Delete":
+            delete_selected_box()
+            return "break"
+        if event.keysym.lower() == "r":
+            reclass_selected_box()
+            return "break"
+        if event.keysym.lower() == "s" and (event.state & 0x4):
+            save_current()
+            return "break"
+        if event.keysym in ("Return", "KP_Enter"):
+            # Enter: kaydet ve sonraki resme gec.
+            if state["index"] < len(images) - 1:
+                save_current()
+                state["index"] += 1
+                load_current()
+            else:
+                finish()
+            return "break"
+        if event.keysym == "Escape":
+            cancel()
+            return "break"
+        return None
+
+    class_combo.bind("<<ComboboxSelected>>", on_class_changed)
+
+    canvas.bind("<ButtonPress-1>", on_mouse_down)
+    canvas.bind("<B1-Motion>", on_mouse_move)
+    canvas.bind("<ButtonRelease-1>", on_mouse_up)
+
+    previous_button.configure(command=lambda: move(-1))
+    save_button.configure(command=save_current)
+    next_button.configure(command=lambda: move(1))
+    save_next_button.configure(
+        command=lambda: (
+            save_current(),
+            move(1, save_if_dirty=False)
+        )
+    )
+    finish_button.configure(command=finish)
+
+    root.bind_all("<KeyPress-Left>", on_key, add="+")
+    root.bind_all("<KeyPress-Right>", on_key, add="+")
+    root.bind_all("<KeyPress-Delete>", on_key, add="+")
+    root.bind_all("<KeyPress-Return>", on_key, add="+")
+    root.bind_all("<KeyPress-KP_Enter>", on_key, add="+")
+    root.bind_all("<KeyPress-Escape>", on_key, add="+")
+    root.bind_all("<Control-KeyPress-s>", on_key, add="+")
+    root.bind_all("<KeyPress-r>", on_key, add="+")
+
+    def on_resize(_event=None):
+        # Pencere boyutu degistiginde resmi ve kutulari yeni alana sigdir.
+        if state["image"] is not None:
+            current_index = state["index"]
+            dirty = state["dirty"]
+            boxes = list(state["boxes"])
+
+            try:
+                with Image.open(state["image"]) as im:
+                    original = im.convert("RGB")
+                root.update_idletasks()
+                max_w = max(300, canvas.winfo_width() - 30)
+                max_h = max(250, canvas.winfo_height() - 30)
+                display = original.copy()
+                display.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
+                state["display_size"] = display.size
+                state["photo"] = ImageTk.PhotoImage(display)
+                state["display_origin"] = (
+                    (canvas.winfo_width() - display.size[0]) / 2,
+                    (canvas.winfo_height() - display.size[1]) / 2,
+                )
+                state["boxes"] = boxes
+                state["dirty"] = dirty
+                draw_all()
+            except Exception:
+                pass
+
+    # Resize'i her pikselde tekrar resim acacak kadar agirlastirmamak icin
+    # Tkinter'in after mekanizmasiyla gecikmeli calistir.
+    resize_job = {"id": None}
+
+    def schedule_resize(event=None):
+        if resize_job["id"] is not None:
+            try:
+                root.after_cancel(resize_job["id"])
+            except Exception:
+                pass
+        resize_job["id"] = root.after(120, on_resize)
+
+    canvas.bind("<Configure>", schedule_resize)
+
+    root.protocol("WM_DELETE_WINDOW", cancel)
+
+    update_color_indicator()
+    load_current()
+    root.mainloop()
+
+    if not state["closed"]:
+        return
+
+    # Pencere kapatildiysa kaydedilmemis degisiklikleri sessizce silmeyelim.
+    if state["dirty"]:
+        # root.quit() sonrasi burada tekrar GUI soru sormak yerine son resmi kaydet.
+        # Kullanici Cik butonunu kullandiginda da kaydedilmemis kutular kaybolmasin.
+        save_current()
+
+    print(
+        f"Annotation ekrani kapatildi. Islenen resim klasoru: {images_dir}\n"
+        f"Label klasoru: {labels_dir}\n"
+        f"Class kaynagi: {yaml_path}"
+    )
+
 def _impl_filter_classes():
     filter_action = ask_select(
         "Class islemi:",
@@ -1048,18 +2397,332 @@ def validate_new_dataset_name(name):
     return name
 
 
+
+def is_flat_images_labels_dataset(root):
+    """Kaynakta train/val/test yok, sadece images + labels varsa True."""
+    if not root.is_dir():
+        return False
+    has_images = (root / "images").is_dir()
+    has_labels = (root / "labels").is_dir()
+    has_split = any(
+        (root / split).is_dir()
+        for split in ("train", "val", "valid", "test")
+    )
+    return has_images and has_labels and not has_split
+
+
+def choose_flat_destination_layout():
+    """
+    Flat images+labels kaynagi birlestirilirken hedef yapisini sec:
+      1) train/val/test/images + labels
+      2) images + labels
+      3) secilen hedef dizine dogrudan kopyala
+    """
+    return ask_select(
+        "Hedefte train/val/test klasorleri yok. Flat kaynak nasil yerlestirilsin?",
+        [
+            questionary.Choice(
+                "train/val/test klasorlerini olustur; dosyalari train'e koy",
+                "split",
+            ),
+            questionary.Choice(
+                "Hedef icinde images ve labels klasorleri olustur",
+                "flat",
+            ),
+            questionary.Choice(
+                "Secilen hedef dizine dogrudan yapistir",
+                "direct",
+            ),
+        ],
+    )
+
+
+
+def choose_merge_sources(message):
+    """
+    Merge icin kaynak olarak hem dataset kokunu hem de tek bir split klasorunu
+    (train/val/valid/test) secmeye izin verir.
+
+    ONEMLI:
+      dataset/train veya dataset/valid gibi bir klasor secildiginde,
+      o klasorun icinde images + labels bulunmasi onu SPLIT olarak kabul ettirir.
+      Once looks_like_dataset() kontrolu yapilmaz; aksi halde train/val/valid/test
+      klasoru yanlislikla dataset koku sanilip split_dirs(..., create=True)
+      tarafindan icine yeni train/val/test klasorleri olusturulabiliyordu.
+    """
+    selected = []
+    while True:
+        selected_path = choose_directory(message, BASE_DIRECTORY).resolve()
+
+        source_root = None
+        selected_split = None
+        name = selected_path.name.casefold()
+
+        # 1) ONCE tek split kontrolu.
+        # dataset/train, dataset/val, dataset/valid, dataset/test
+        if (
+            name in {"train", "val", "valid", "test"}
+            and (selected_path / "images").is_dir()
+            and (selected_path / "labels").is_dir()
+        ):
+            source_root = selected_path.parent
+            selected_split = "val" if name == "valid" else name
+
+        # 2) dataset/images/train, dataset/images/val, ...
+        elif (
+            selected_path.parent.name.casefold() == "images"
+            and name in {"train", "val", "valid", "test"}
+            and (
+                selected_path.parent.parent / "labels" / name
+            ).is_dir()
+        ):
+            source_root = selected_path.parent.parent
+            selected_split = "val" if name == "valid" else name
+
+        # 3) dataset/images + dataset/labels
+        elif (
+            name == "images"
+            and (selected_path.parent / "labels").is_dir()
+        ):
+            source_root = selected_path.parent
+
+        # 4) Ancak bundan sonra gercek dataset kokunu kontrol et.
+        elif looks_like_dataset(selected_path):
+            source_root = selected_path
+
+        else:
+            raise ValueError(
+                "Secilen klasor dataset koku, dataset/train|val|valid|test, "
+                "images veya images/train|val|valid|test yapisinda olmali."
+            )
+
+        entry = (source_root, selected_split)
+        if entry in selected:
+            raise ValueError("Bu kaynak zaten secildi.")
+
+        selected.append(entry)
+
+        if selected_split is None:
+            split_text = "tum splitler"
+        else:
+            split_text = f"sadece {selected_split}"
+
+        print(f"Secildi ({len(selected)}): {source_root} -> {split_text}")
+
+        if not ask_confirm("Bu gruba baska kaynak klasoru eklensin mi?", False):
+            return selected
+
+
+
+def manifest_selected_split_without_yaml(root, split):
+    """data.yaml olmadan tek bir splitin resim-label ciftlerini tara."""
+    dirs = split_dirs(root, create=False)
+    paths = dirs[split]
+    if not paths["images"].is_dir() or not paths["labels"].is_dir():
+        raise FileNotFoundError(
+            f"{root} icinde {split}/images ve {split}/labels bulunamadi."
+        )
+
+    images = image_files(paths["images"])
+    show_progress(
+        f"{root.name}/{split} tarama",
+        0,
+        len(images),
+        f"0/{len(images)} resim",
+    )
+
+    result = []
+    for index, image in enumerate(images, 1):
+        label = paths["labels"] / f"{image.stem}.txt"
+        if not label.is_file():
+            raise FileNotFoundError(f"Label bulunamadi: {label}")
+
+        # YAML olmadigi icin class ID'leri sadece sayisal olarak dogrula.
+        lines, counts = parse_label(label, None)
+        result.append(
+            Pair(
+                image,
+                label,
+                split,
+                frozenset(counts),
+                counts,
+            )
+        )
+
+        if index == len(images) or index % max(1, len(images) // 100) == 0:
+            show_progress(
+                f"{root.name}/{split} tarama",
+                index,
+                len(images),
+                f"{index}/{len(images)} resim",
+                finish=index == len(images),
+            )
+    return result
+
+
+def manifest_selected_split(root, split):
+    """Yalnizca secilen train/val/test splitini Pair listesine cevirir."""
+    if split is None:
+        return manifest(root, require_yaml=True)
+
+    dirs = split_dirs(root, create=False)
+    paths = dirs[split]
+    if not paths["images"].is_dir() or not paths["labels"].is_dir():
+        raise FileNotFoundError(
+            f"{root} icinde {split}/images ve {split}/labels bulunamadi."
+        )
+
+    _, names, _ = load_yaml(root, required=True)
+    known = set(names)
+    images = image_files(paths["images"])
+
+    show_progress(
+        f"{root.name}/{split} tarama",
+        0,
+        len(images),
+        f"0/{len(images)} resim",
+    )
+    result = []
+    for index, image in enumerate(images, 1):
+        label = paths["labels"] / f"{image.stem}.txt"
+        if not label.is_file():
+            raise FileNotFoundError(f"Label bulunamadi: {label}")
+        _, counts = parse_label(label, known)
+        result.append(
+            Pair(
+                image,
+                label,
+                split,
+                frozenset(counts),
+                counts,
+            )
+        )
+        if index == len(images) or index % max(1, len(images) // 100) == 0:
+            show_progress(
+                f"{root.name}/{split} tarama",
+                index,
+                len(images),
+                f"{index}/{len(images)} resim",
+                finish=index == len(images),
+            )
+    return result
+
+
+
+def resolve_images_labels_target(selected_path):
+    """
+    Resolve exactly the user's selected target.
+
+    Cases:
+      A) selected_path == .../images and sibling .../labels exists:
+         images -> selected_path, labels -> sibling labels.
+      B) selected_path contains images/ and labels/:
+         images -> selected_path/images, labels -> selected_path/labels.
+      C) selected_path is train/val/valid/test and contains images/labels:
+         images -> selected_path/images, labels -> selected_path/labels.
+      D) selected_path is empty/other:
+         return None; caller may use the normal dataset workflow.
+
+    IMPORTANT: this function NEVER creates train/val/test.
+    """
+    selected_path = selected_path.resolve()
+
+    # User selected the actual images directory.
+    if selected_path.name.casefold() == "images":
+        sibling_labels = selected_path.parent / "labels"
+        if sibling_labels.is_dir():
+            return {
+                "root": selected_path.parent,
+                "images": selected_path,
+                "labels": sibling_labels,
+                "mode": "direct",
+            }
+
+        # labels does not exist: caller must ask before creating it.
+        return {
+            "root": selected_path.parent,
+            "images": selected_path,
+            "labels": sibling_labels,
+            "mode": "direct_missing_labels",
+        }
+
+    # User selected a directory that already contains images + labels.
+    if (
+        (selected_path / "images").is_dir()
+        and (selected_path / "labels").is_dir()
+    ):
+        return {
+            "root": selected_path,
+            "images": selected_path / "images",
+            "labels": selected_path / "labels",
+            "mode": "direct",
+        }
+
+    return None
+
+
+
 def _impl_merge_datasets():
-    sources = choose_ordered_datasets(
-        "Ana datasete kopyalanacak KAYNAK klasorleri secin:"
+    sources = choose_merge_sources(
+        "Ana datasete kopyalanacak KAYNAK klasoru/spliti secin:"
     )
     if not sources:
         raise ValueError("En az bir kaynak dataset secilmelidir.")
 
+    source_roots = {root for root, _ in sources}
     source_info = []
-    for source in sources:
-        repair_missing_pairs(source)
-        _, source_names, _ = load_yaml(source)
-        source_info.append((source, source_names, manifest(source, True)))
+    for source, selected_split in sources:
+        # Yalnizca train/val/valid/test secildiyse, data.yaml olmadan
+        # devam edilebilmesine izin ver. Class ID esleme yapilamayacagi icin
+        # bu durumda kaynak class isimleri bos kabul edilir ve hedef secimine
+        # gecilir.
+        if selected_split is not None:
+            yaml_path = source / DATA_YAML_NAME
+            if not yaml_path.is_file():
+                if not ask_confirm(
+                    f"{source} icinde data.yaml bulunamadi. "
+                    "data.yaml olmadan devam etmek ister misiniz?",
+                    False,
+                ):
+                    raise RuntimeError(
+                        f"data.yaml bulunmadigi icin islem iptal edildi: {source}"
+                    )
+
+                source_names = {}
+                pairs = manifest_selected_split_without_yaml(source, selected_split)
+                source_info.append((source, selected_split, source_names, pairs))
+                continue
+
+        # Dataset kokunun tamami secildiyse data.yaml zorunludur.
+        if selected_split is None:
+            repair_missing_pairs(source)
+        # selected_split != None ise kaynak klasorune kesinlikle yeni
+        # train/val/test klasoru olusturulmaz.
+
+        try:
+            _, source_names, _ = load_yaml(source)
+        except ValueError as exc:
+            # data.yaml mevcut ama names/class listesi bos veya gecersizse,
+            # yalnizca tek bir split secildiginde kullaniciya devam etme sansi ver.
+            if selected_split is None:
+                raise
+
+            if not ask_confirm(
+                f"{source / DATA_YAML_NAME} icinde class isimleri bos veya gecersiz. "
+                "data.yaml class isimleri olmadan devam etmek ister misiniz?",
+                False,
+            ):
+                raise RuntimeError(
+                    f"data.yaml class isimleri gecersiz oldugu icin islem iptal edildi: {source}"
+                )
+
+            source_names = {}
+            pairs = manifest_selected_split_without_yaml(source, selected_split)
+            source_info.append((source, selected_split, source_names, pairs))
+            continue
+
+        pairs = manifest_selected_split(source, selected_split)
+        source_info.append((source, selected_split, source_names, pairs))
 
     create_new = ask_confirm("Yeni bir hedef/ana dataset klasoru olusturulsun mu?", False)
     destination_is_new = False
@@ -1077,41 +2740,108 @@ def _impl_merge_datasets():
         destination_is_new = True
         rebuild_destination_yaml = True
     else:
-        destination = choose_destination_folder("Mevcut hedef/ana dataset:", set(sources))
-        required_paths = [
-            destination / split / kind
-            for split in SPLITS for kind in ("images", "labels")
-        ]
-        if all(path.is_dir() for path in required_paths):
-            if ask_confirm(
-                "Hedefte train/val/test images/labels klasorleri zaten var. "
-                "Ayni klasor yapisi yeniden olusturulsun mu? Mevcut dosyalar silinmez.",
-                False,
-            ):
-                split_dirs(destination, create=True)
-        else:
-            split_dirs(destination, create=True)
-            print("Hedefte eksik train/val/test images/labels klasorleri olusturuldu.")
-        repair_missing_pairs(destination)
-        yaml_exists = (destination / DATA_YAML_NAME).is_file()
-        destination_data, destination_names, destination_yaml = load_yaml(
-            destination, required=False
+        destination = choose_destination_folder(
+            "Mevcut hedef/ana dataset:",
+            source_roots,
         )
-        if yaml_exists:
-            rebuild_destination_yaml = ask_confirm(
-                "Hedefte data.yaml zaten var. Secilen kaynaklarin data.yaml class siralarina "
-                "gore yeniden olusturulsun mu? Mevcut label ID'leri de guvenli sekilde degistirilir.",
-                False,
+
+        # ONCE: kullanicinin secimini images+labels mantigiyla coz.
+        # Bu blokta train/val/test OLUSTURULMAZ.
+        direct_target = resolve_images_labels_target(destination)
+
+        if direct_target is not None:
+            flat_destination_mode = "direct"
+            destination_images = direct_target["images"]
+            destination_labels = direct_target["labels"]
+
+            if direct_target["mode"] == "direct_missing_labels":
+                if not ask_confirm(
+                    f"{destination_images} ile ayni dizinde labels klasoru yok. "
+                    "labels klasorunu olusturup label dosyalarini buraya kopyalamak ister misiniz?",
+                    False,
+                ):
+                    raise RuntimeError(
+                        "labels klasoru olmadigi icin islem durduruldu."
+                    )
+                destination_labels.mkdir(parents=True, exist_ok=True)
+
+            print(
+                f"Hedef images : {destination_images}\n"
+                f"Hedef labels : {destination_labels}\n"
+                "Bu hedef icine train/val/test klasorleri OLUSTURULMAYACAK."
             )
-        else:
-            existing_pairs = manifest(destination, require_yaml=False)
-            if existing_pairs:
-                raise RuntimeError(
-                    "Hedefte data.yaml yok fakat mevcut resim/label var. Eski ID anlamlari "
-                    "bilinemedigi icin otomatik data.yaml olusturmak guvenli degil."
+
+            # Flat/direct hedeflerde split_dirs ve repair_missing_pairs kesinlikle
+            # kullanilmaz. Yalnizca secilen images/labels cifti kullanilir.
+            destination_yaml = direct_target["root"] / DATA_YAML_NAME
+            yaml_exists = destination_yaml.is_file()
+
+            destination_data, destination_names, _ = load_yaml(
+                direct_target["root"], required=False
+            )
+
+            if yaml_exists:
+                rebuild_destination_yaml = ask_confirm(
+                    "Hedefte data.yaml zaten var. Secilen kaynaklarin data.yaml class "
+                    "siralarina gore yeniden olusturulsun mu?",
+                    False,
                 )
-            rebuild_destination_yaml = True
-            print("Hedefte data.yaml yok; secilen kaynak data.yaml dosyalarindan olusturulacak.")
+            else:
+                # Hedefte mevcut image/label ciftleri varsa manifest() kullanma;
+                # o fonksiyon split yapisini varsayabilir. Dogrudan klasorleri tara.
+                existing_images = image_files(destination_images)
+                existing_labels = list(destination_labels.glob("*.txt"))
+                if existing_images or existing_labels:
+                    if not destination_names:
+                        print(
+                            "Hedefte data.yaml yok ve mevcut images/labels dosyalari var. "
+                            "Mevcut ID anlamlari korunacak; yeni data.yaml ancak class "
+                            "isimleri belirlenebiliyorsa yazilacak."
+                        )
+                rebuild_destination_yaml = True
+
+        else:
+            # Buraya ancak kullanici gercek bir dataset kokunu / normal hedefi
+            # sectiginde gelinir. Flat/split hedefe dokunulmaz.
+            flat_destination_mode = None
+
+            destination_data, destination_names, destination_yaml = load_yaml(
+                destination, required=False
+            )
+
+            # Normal hedefte eksik split yapisini burada olusturabiliriz.
+            # Bu, tek images/labels secimi icin ASLA calismaz.
+            required_paths = [
+                destination / split / kind
+                for split in SPLITS for kind in ("images", "labels")
+            ]
+            if not all(path.is_dir() for path in required_paths):
+                split_dirs(destination, create=True)
+
+            repair_missing_pairs(destination)
+
+            yaml_exists = destination_yaml.is_file()
+            if yaml_exists:
+                rebuild_destination_yaml = ask_confirm(
+                    "Hedefte data.yaml zaten var. Secilen kaynaklarin data.yaml class "
+                    "siralarina gore yeniden olusturulsun mu? Mevcut label ID'leri de "
+                    "guvenli sekilde degistirilir.",
+                    False,
+                )
+            else:
+                existing_pairs = manifest(destination, require_yaml=False)
+                if existing_pairs:
+                    raise RuntimeError(
+                        "Hedefte data.yaml yok fakat mevcut resim/label var. "
+                        "Eski ID anlamlari bilinemedigi icin otomatik data.yaml "
+                        "olusturmak guvenli degil."
+                    )
+                rebuild_destination_yaml = True
+                print(
+                    "Hedefte data.yaml yok; secilen kaynak data.yaml dosyalarindan "
+                    "olusturulacak."
+                )
+
 
     mode_choices = [questionary.Choice(
         "data.yaml adlarina gore eslestir; yenileri sona ekle (onerilen)", "names")]
@@ -1127,36 +2857,67 @@ def _impl_merge_datasets():
         mode_choices,
     )
 
-    # Yeni veya yeniden olusturulan YAML'da secim sirasi 0'dan baslar.
-    # Mevcut YAML korunuyorsa onun class sirasi once gelir, yeni class'lar eklenir.
     output_names = {} if rebuild_destination_yaml else dict(destination_names)
     mappings = {}
-    for source, source_names, _ in source_info:
+    for source, selected_split, source_names, source_pairs in source_info:
+        source_key = (source, selected_split)
         if mode == "names":
-            id_map, output_names = build_name_map(source_names, output_names)
+            if not source_names:
+                # data.yaml olmayan tek-split kaynakta class isimleri bilinmiyor.
+                # Bu durumda label ID'lerini oldugu gibi kopyalamak guvenli olan
+                # tek davranistir; hedef YAML'da ilgili ID'ler zaten varsa kullanilir.
+                if output_names:
+                    max_source_id = max(
+                        (cid for pair in source_pairs for cid in pair.class_ids),
+                        default=-1,
+                    )
+                    missing_ids = [
+                        cid for cid in range(max_source_id + 1)
+                        if cid not in output_names
+                    ]
+                    if missing_ids:
+                        raise ValueError(
+                            f"{source.name}/{selected_split}: data.yaml yok ve "
+                            f"hedef data.yaml bu class ID'lerini tanimlamiyor: "
+                            f"{missing_ids}. Class isimleri bilinmeden guvenli "
+                            "esleme yapilamaz."
+                        )
+                id_map = {}
+                for pair in source_pairs:
+                    for cid in pair.class_ids:
+                        id_map[cid] = cid
+            else:
+                id_map, output_names = build_name_map(source_names, output_names)
         elif mode == "single":
-            print(f"\nHedef class'lar ({source.name} icin):")
+            print(f"\nHedef class'lar ({source.name}/{selected_split or 'tum splitler'} icin):")
             for cid in sorted(output_names):
                 print(f"  {cid}: {output_names[cid]}")
-            new_id = int(ask_text(f"{source.name} icindeki tum kutularin hedef class ID'si:"))
+            new_id = int(ask_text(
+                f"{source.name}/{selected_split or 'tum splitler'} icindeki "
+                "tum kutularin hedef class ID'si:"
+            ))
             if new_id not in output_names:
                 raise ValueError(f"ID hedef data.yaml icinde bulunmuyor: {new_id}")
             id_map = {old: new_id for old in source_names}
         else:
             if set(source_names) - set(output_names):
                 raise ValueError(f"{source.name}: hedefte bulunmayan ID var; RAW guvensiz.")
-            bad = [i for i in source_names if normalized_name(source_names[i]) !=
-                   normalized_name(output_names[i])]
+            bad = [
+                i for i in source_names
+                if normalized_name(source_names[i]) != normalized_name(output_names[i])
+            ]
             if bad:
                 raise ValueError(f"{source.name}: ayni ID farkli class anlaminda: {bad}")
             id_map = {i: i for i in source_names}
-        mappings[source] = id_map
+        mappings[source_key] = id_map
 
     destination_id_map = None
     destination_pairs_before_merge = []
     if rebuild_destination_yaml and not destination_is_new and destination_names:
         destination_pairs_before_merge = manifest(destination, require_yaml=True)
-        target_by_name = {normalized_name(name): cid for cid, name in output_names.items()}
+        target_by_name = {
+            normalized_name(name): cid for cid, name in output_names.items()
+        }
         used_old_ids = set()
         for pair in destination_pairs_before_merge:
             used_old_ids.update(pair.class_ids)
@@ -1165,7 +2926,9 @@ def _impl_merge_datasets():
         for old_id in sorted(used_old_ids):
             key = normalized_name(destination_names[old_id])
             if key not in target_by_name:
-                missing_used_classes.append(f"{old_id}:{destination_names[old_id]}")
+                missing_used_classes.append(
+                    f"{old_id}:{destination_names[old_id]}"
+                )
             else:
                 destination_id_map[old_id] = target_by_name[key]
         if missing_used_classes:
@@ -1177,12 +2940,14 @@ def _impl_merge_datasets():
 
     print("\nClass eslemeleri:")
     total_pairs = 0
-    for source, source_names, pairs in source_info:
-        print(f"  [{source.name}] resim-label cifti={len(pairs)}")
+    for source, selected_split, source_names, pairs in source_info:
+        split_text = selected_split or "train/val/test"
+        print(f"  [{source.name} -> {split_text}] resim-label cifti={len(pairs)}")
         total_pairs += len(pairs)
-        for old in sorted(mappings[source]):
-            new = mappings[source][old]
+        for old in sorted(mappings[(source, selected_split)]):
+            new = mappings[(source, selected_split)][old]
             print(f"    {old}:{source_names[old]} -> {new}:{output_names[new]}")
+
     print("\nOlusacak ana data.yaml class sirasi:")
     for cid in sorted(output_names):
         print(f"  {cid}: {output_names[cid]}")
@@ -1196,6 +2961,7 @@ def _impl_merge_datasets():
         backup = backup_metadata(destination, "merge")
         if backup:
             print("Hedef label/YAML yedegi:", backup)
+
     remapped_existing = 0
     if destination_id_map is not None:
         for pair in destination_pairs_before_merge:
@@ -1205,41 +2971,91 @@ def _impl_merge_datasets():
             if new_text != old_text:
                 pair.label.write_text(new_text, encoding="utf-8")
                 remapped_existing += 1
-        print(f"Yeni data.yaml sirasi icin degistirilen mevcut hedef label: {remapped_existing}")
-    dirs = split_dirs(destination, create=True)
+        print(
+            f"Yeni data.yaml sirasi icin degistirilen mevcut hedef label: "
+            f"{remapped_existing}"
+        )
+
+    # Direct images/labels hedefinde split dizinleri olusturulmaz.
+    if not destination_is_new and flat_destination_mode == "direct":
+        dirs = None
+    elif destination_is_new:
+        dirs = split_dirs(destination, create=True)
+    else:
+        dirs = split_dirs(destination, create=True)
+
     renamed = negatives = 0
     copied = 0
     copy_progress_step = max(1, total_pairs // 100)
     show_progress("Kopyalama", 0, total_pairs, f"0/{total_pairs} cift")
-    for source, source_names, pairs in source_info:
-        id_map = mappings[source]
+
+    for source, selected_split, source_names, pairs in source_info:
+        id_map = mappings[(source, selected_split)]
         for pair in pairs:
-            target = dirs[pair.source_split]
-            stem, changed = unique_stem(pair.image.stem, source.name,
-                                        target["images"], target["labels"])
+            if (
+                not destination_is_new
+                and flat_destination_mode == "direct"
+            ):
+                target = {
+                    "images": destination_images,
+                    "labels": destination_labels,
+                }
+            else:
+                target = dirs[pair.source_split]
+
+
+            stem, changed = unique_stem(
+                pair.image.stem,
+                source.name,
+                target["images"],
+                target["labels"],
+            )
             lines, _ = parse_label(pair.label, set(source_names))
-            shutil.copy2(pair.image, target["images"] / f"{stem}{pair.image.suffix}")
-            text = rewrite_label(lines, id_map)
+            shutil.copy2(
+                pair.image,
+                target["images"] / f"{stem}{pair.image.suffix}",
+            )
+            text_label = rewrite_label(lines, id_map)
             destination_label = target["labels"] / f"{stem}.txt"
             original_text = pair.label.read_text(encoding="utf-8-sig")
-            if text == original_text:
-                # ID zaten dogruysa label icerigine dokunmadan kopyala.
+            if text_label == original_text:
                 shutil.copy2(pair.label, destination_label)
             else:
-                destination_label.write_text(text, encoding="utf-8")
+                destination_label.write_text(text_label, encoding="utf-8")
+
             copied += 1
             renamed += changed
-            negatives += not text.strip()
+            negatives += not text_label.strip()
             if copied % copy_progress_step == 0 or copied == total_pairs:
                 show_progress(
-                    "Kopyalama", copied, total_pairs,
+                    "Kopyalama",
+                    copied,
+                    total_pairs,
                     f"{copied}/{total_pairs} cift",
                     finish=copied == total_pairs,
                 )
+
     print("data.yaml yaziliyor ve birlestirilen dataset dogrulaniyor...")
-    write_yaml(destination_yaml, destination_data, output_names)
-    validate_dataset(destination, False, True)
-    print(f"Bitti: kopyalanan={copied}, yeniden adlandirilan={renamed}, negatif={negatives}")
+    if output_names:
+        write_yaml(destination_yaml, destination_data, output_names)
+    else:
+        # Class isimleri bilinmiyorsa bos/hatali data.yaml olusturmak yerine
+        # YAML'siz devam et. Kullanici daha once bu duruma izin vermistir.
+        print("Class isimleri bilinmiyor; bos data.yaml olusturulmayacak.")
+
+    if not destination_is_new and flat_destination_mode == "direct":
+        # Dogrudan secilen images/labels hedefini validate et.
+        validate_flat_dataset(
+            direct_target["root"],
+            False,
+            bool(output_names),
+        )
+    else:
+        validate_dataset(destination, False, bool(output_names))
+    print(
+        f"Bitti: kopyalanan={copied}, yeniden adlandirilan={renamed}, "
+        f"negatif={negatives}"
+    )
 
 
 def merge_datasets():
@@ -1474,11 +3290,22 @@ def _impl_convert_to_zip_layout():
         return
 
     data, names, yaml_path = load_yaml(root, required=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    yaml_backup = root.parent / f"{root.name}_layout_yaml_backup_{stamp}.zip"
-    with ZipFile(yaml_backup, "w", ZIP_DEFLATED) as archive:
-        archive.write(yaml_path, yaml_path.relative_to(root))
-    print("data.yaml yedegi:", yaml_backup)
+    should_save, yaml_backup_name = ask_save_backup(
+        "layout donusumu",
+        "Mevcut data.yaml dosyasinin",
+        f"{root.name}_layout_yaml_backup",
+    )
+    if should_save:
+        yaml_backup = root.parent / yaml_backup_name
+        if yaml_backup.exists() and not ask_confirm(f"{yaml_backup} zaten var. Uzerine yazilsin mi?", False):
+            print("data.yaml save islemi iptal edildi.")
+            return
+        with ZipFile(yaml_backup, "w", ZIP_DEFLATED) as archive:
+            archive.write(yaml_path, yaml_path.relative_to(root))
+        print("data.yaml save dosyasi:", yaml_backup)
+    else:
+        yaml_backup = None
+        print("data.yaml save dosyasi olusturulmadi.")
 
     temp = root / f"_layout_conversion_temp_{stamp}"
     if temp.exists():
@@ -1640,6 +3467,70 @@ def create_dataset_zip():
         return None
 
 
+
+def validate_flat_dataset(root, interactive=True, require_yaml=False):
+    """Validate a flat images/labels directory without creating train/val/test."""
+    images_dir = root / "images"
+    labels_dir = root / "labels"
+
+    if not images_dir.is_dir() or not labels_dir.is_dir():
+        raise FileNotFoundError(
+            f"Flat dataset icin images ve labels gerekli: {root}"
+        )
+
+    _, names, _ = load_yaml(root, required=require_yaml)
+    known = set(names) if names else None
+
+    images = image_files(images_dir)
+    labels = sorted(labels_dir.glob("*.txt"))
+    image_stems = {p.stem for p in images}
+    label_stems = {p.stem for p in labels}
+
+    errors = []
+    errors += [f"{root.name}: {s} resmine ait label yok" for s in image_stems - label_stems]
+    errors += [f"{root.name}: {s}.txt label'ina ait resim yok" for s in label_stems - image_stems]
+
+    total_boxes = total_empty = 0
+    class_boxes = Counter()
+
+    show_progress("Flat dataset dogrulama", 0, len(labels), f"0/{len(labels)} label")
+    for index, label in enumerate(labels, 1):
+        try:
+            lines, counts = parse_label(label, known)
+            total_boxes += len(lines)
+            total_empty += not lines
+            class_boxes.update(counts)
+        except ValueError as exc:
+            errors.append(str(exc))
+
+        if index == len(labels) or index % max(1, len(labels) // 100) == 0:
+            show_progress(
+                "Flat dataset dogrulama",
+                index,
+                len(labels),
+                f"{index}/{len(labels)} label",
+                finish=index == len(labels),
+            )
+
+    print(f"\nDogrulama: {root}")
+    print(
+        f"  images: {len(images)}, labels: {len(labels)}, "
+        f"kutu={total_boxes}, negatif={total_empty}"
+    )
+    if names:
+        for cid in sorted(names):
+            print(f"  class {cid}:{names[cid]} kutu={class_boxes[cid]}")
+
+    if errors or len(images) != len(labels):
+        raise RuntimeError(
+            f"Flat dataset dogrulama basarisiz ({len(errors)} hata):\n"
+            + "\n".join(errors[:30])
+        )
+
+    print("  SONUC: resim-label esleri ve YOLO etiketleri gecerli.")
+    return {"flat": (len(images), len(labels), total_boxes, total_empty)}
+
+
 def validate_dataset(root, interactive=True, require_yaml=False):
     if interactive:
         repair_missing_pairs(root)
@@ -1749,18 +3640,28 @@ def _impl_create_empty_labels_for_images():
         return
 
     if existing_labels:
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        backup = images_dir.parent / f"labels_empty_backup_{stamp}.zip"
-        with ZipFile(backup, "w", ZIP_DEFLATED) as archive:
-            show_progress("Mevcut label yedegi", 0, len(existing_labels), f"0/{len(existing_labels)}")
-            for index, label in enumerate(existing_labels, 1):
-                archive.write(label, f"labels/{label.name}")
-                if index == len(existing_labels) or index % max(1, len(existing_labels) // 100) == 0:
-                    show_progress(
-                        "Mevcut label yedegi", index, len(existing_labels),
-                        f"{index}/{len(existing_labels)}", finish=index == len(existing_labels),
-                    )
-        print("Mevcut label yedegi:", backup)
+        should_save, backup_name = ask_save_backup(
+            "bos label olusturma",
+            "Mevcut label dosyalarinin",
+            "labels_empty_backup",
+        )
+        if should_save:
+            backup = images_dir.parent / backup_name
+            if backup.exists() and not ask_confirm(f"{backup} zaten var. Uzerine yazilsin mi?", False):
+                print("Label save islemi iptal edildi.")
+                return
+            with ZipFile(backup, "w", ZIP_DEFLATED) as archive:
+                show_progress("Mevcut label save", 0, len(existing_labels), f"0/{len(existing_labels)}")
+                for index, label in enumerate(existing_labels, 1):
+                    archive.write(label, f"labels/{label.name}")
+                    if index == len(existing_labels) or index % max(1, len(existing_labels) // 100) == 0:
+                        show_progress(
+                            "Mevcut label save", index, len(existing_labels),
+                            f"{index}/{len(existing_labels)}", finish=index == len(existing_labels),
+                        )
+            print("Mevcut label save dosyasi:", backup)
+        else:
+            print("Mevcut label save dosyasi olusturulmadi.")
 
     labels_dir.mkdir(parents=True, exist_ok=True)
     show_progress("Bos label olusturma", 0, len(images), f"0/{len(images)} label")
@@ -1835,8 +3736,9 @@ def main():
                 while True:
                     action = ask_select(
                         "Yapilacak islem:",
-                        [questionary.Choice("(1) Fotograflar icin bos/negatif label olustur", "empty_labels"),
-                         questionary.Choice("(2) Class'lari filtrele/azalt", "filter"),
+                        [questionary.Choice("(1) Kutu sec / YOLO box ciz", "annotate"),
+                         questionary.Choice("(2) Fotograflar icin bos/negatif label olustur", "empty_labels"),
+                         questionary.Choice("(3) Class'lari filtrele/azalt", "filter"),
                          questionary.Choice("(3) Datasetleri ana dataset icine birlestir", "merge"),
                          questionary.Choice("(4) Train/val/test oranlariyla yeniden bolustur", "split"),
                          questionary.Choice("(5) Ana dataseti images/split + labels/split duzenine cevir", "convert"),
@@ -1849,7 +3751,8 @@ def main():
                         print("Cikis yapildi.")
                         return
 
-                    {"empty_labels": create_empty_labels_for_images,
+                    {"annotate": annotate_images_with_boxes,
+                     "empty_labels": create_empty_labels_for_images,
                      "filter": filter_classes, "merge": merge_datasets,
                      "split": redistribute_datasets, "convert": convert_to_zip_layout,
                      "validate": validation_menu, "zip": create_dataset_zip}[action]()
@@ -1886,5 +3789,10 @@ if __name__ == "__main__":
         print("\nIslem kullanici tarafindan iptal edildi.")
         raise SystemExit(130)
     except Exception as exc:
-        print(f"\nHATA: {exc}")
+        print(
+            f"\nHATA [{type(exc).__name__}]: {exc}",
+            file=sys.stderr,
+        )
+        import traceback
+        traceback.print_exc()
         raise SystemExit(1)
