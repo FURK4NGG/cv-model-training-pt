@@ -10,7 +10,7 @@
 
 ![Demo Image](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-3.webp)
 
-https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-4.mp4
+![Arch_Hyprland_dots Demo GIF](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-4.mp4)
 
 ![Demo Image](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-5.mp4)
 
