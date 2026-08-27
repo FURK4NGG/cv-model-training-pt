@@ -38,37 +38,37 @@ try:
     from prompt_toolkit.layout import Layout, Window
     from prompt_toolkit.layout.controls import FormattedTextControl
 except ImportError as exc:
-    raise SystemExit("Installation: py -m pip install questionary PyYAML") from exc[cite: 4]
+    raise SystemExit("Installation: py -m pip install questionary PyYAML") from exc
 
-BASE_DIRECTORY = Path(__file__).resolve().parent[cite: 4]
-SPLITS = ("train", "val", "test")[cite: 4]
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}[cite: 4]
-DATA_YAML_NAME = "data.yaml"[cite: 4]
-DEFAULT_RATIOS = (80.0, 10.0, 10.0)[cite: 4]
-SEED = 42[cite: 4]
-CREATE_BACKUP = True[cite: 4]
+BASE_DIRECTORY = Path(__file__).resolve().parent
+SPLITS = ("train", "val", "test")
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
+DATA_YAML_NAME = "data.yaml"
+DEFAULT_RATIOS = (80.0, 10.0, 10.0)
+SEED = 42
+CREATE_BACKUP = True
 
 
 def ask_save_backup(purpose, description, default_name):
     """Ask whether a ZIP backup is wanted BEFORE asking for its filename."""
     should_save = ask_confirm(
-        f"Do you want to create a save file for {description}?",
+        f"Do you want to create a backup file for {description}?",
         True,
     )
     if not should_save:
         return False, None
 
     filename = ask_text(
-        f"Save file name for {description} (example: {default_name}.zip):",
+        f"Backup file name for {description} (example: {default_name}.zip):",
         f"{default_name}.zip",
     )
     if not filename:
-        raise ValueError("Save file name cannot be empty.")
+        raise ValueError("Backup file name cannot be empty.")
     if not filename.lower().endswith(".zip"):
         filename += ".zip"
     filename = Path(filename).name
     if filename in {".", ".."} or any(char in filename for char in '<>:"/\\|?*'):
-        raise ValueError("Invalid save file name.")
+        raise ValueError("Invalid backup file name.")
     return True, filename
 
 
@@ -76,7 +76,7 @@ def create_selected_backup(root, purpose, description, default_name, files=None,
     """Create a user-approved ZIP backup. Returns the ZIP path or None."""
     should_save, filename = ask_save_backup(purpose, description, default_name)
     if not should_save:
-        print("Save file was not created.")
+        print("Backup file was not created.")
         return None
 
     target = root.parent / filename
@@ -102,16 +102,16 @@ def create_selected_backup(root, purpose, description, default_name, files=None,
         for file in files:
             if file.is_file():
                 archive.write(file, file.relative_to(root))
-    print("Save file:", target)
+    print("Backup file:", target)
     return target
 
 # Ensure "*" is shown as indicator for selected items in checkboxes.
-questionary_common.INDICATOR_SELECTED = "*"[cite: 4]
-questionary_common.INDICATOR_UNSELECTED = " "[cite: 4]
+questionary_common.INDICATOR_SELECTED = "*"
+questionary_common.INDICATOR_UNSELECTED = " "
 
 # Determined once at program start by configure_platform().
-SELECTED_OS = None[cite: 4]
-SELECTED_LINUX_DISTRO = None[cite: 4]
+SELECTED_OS = None
+SELECTED_LINUX_DISTRO = None
 
 
 @dataclass(frozen=True)
@@ -168,7 +168,7 @@ def ask_select(message, choices):
 def ask_checkbox(message, choices):
     value = questionary.checkbox(
         message, choices=with_back_choice(choices),
-        instruction="(Arrow keys: navigate, Space: select/unselect, Enter: confirm)",
+        instruction="(Arrow keys: navigate, Space: select/deselect, Enter: confirm)",
     ).ask()
     if value is None:
         raise KeyboardInterrupt
@@ -337,8 +337,7 @@ def choose_one_dataset(message, exclude=None):
         return folder
 
     # If the selected folder is a dataset root whose splits are valid,
-    # looks_like_dataset() may reject it because its implementation expects
-    # a different layout. Detect the actual filesystem structure directly.
+    # detect the actual filesystem structure directly.
     split_found = False
     for split in SPLITS:
         split_dir = folder / split
@@ -684,9 +683,7 @@ def load_yaml_for_annotation(path):
     """
     Load data.yaml for the annotation GUI without rejecting duplicate names.
 
-    The main dataset-management workflow keeps its stricter validation:
-    duplicate class names are still rejected there. Annotation is different:
-    the numeric class ID is the actual identifier, so two IDs with the same
+    The numeric class ID is the actual identifier, so two IDs with the same
     display name can still be selected unambiguously in the GUI.
     """
     path = Path(path)
@@ -825,7 +822,7 @@ def backup_metadata(root, purpose):
         default_name,
     )
     if not should_save:
-        print("Save file was not created.")
+        print("Backup file was not created.")
         return None
 
     target = root.parent / filename
@@ -843,15 +840,15 @@ def backup_metadata(root, purpose):
     ]
 
     with ZipFile(target, "w", ZIP_DEFLATED) as archive:
-        show_progress("Creating save file", 0, len(files), f"0/{len(files)} files")
+        show_progress("Creating backup file", 0, len(files), f"0/{len(files)} files")
         for index, file in enumerate(files, 1):
             archive.write(file, file.relative_to(root))
             if index == len(files) or index % max(1, len(files) // 100) == 0:
                 show_progress(
-                    "Creating save file", index, len(files), f"{index}/{len(files)} files",
+                    "Creating backup file", index, len(files), f"{index}/{len(files)} files",
                     finish=index == len(files),
                 )
-    print("Save file:", target)
+    print("Backup file:", target)
     return target
 
 
@@ -1073,13 +1070,11 @@ def force_all_labels_to_class_id(root, data, names, yaml_path):
     if new_id != 0:
         print(
             "WARNING: Training ID for a single-class dataset should normally be 0. "
-            f"Value {new_id} can be used for preparation before merging into main dataset; "
+            f"{new_id} value can be used for preparation before merging into main dataset; "
             "do not train this intermediate dataset directly."
         )
 
-    # The goal of this mode is to repair broken/old IDs. Therefore, old ID is not
-    # required to be defined in data.yaml; line format and coordinates
-    # are still fully validated.
+    # The goal of this mode is to repair broken/old IDs.
     pairs = manifest(root, require_yaml=False, validate_class_ids=False)
     plans = []
     box_count = empty_count = already_correct = 0
@@ -1504,7 +1499,6 @@ def extract_or_delete_class_pairs(root, data, names):
     print(f"Copying completed: pairs={total}, boxes={copied_boxes}, destination={destination}")
 
 
-
 def annotate_images_with_boxes():
     """
     Perform YOLO bounding-box annotation using GUI.
@@ -1632,9 +1626,6 @@ def annotate_images_with_boxes():
             f"Images folder not found: {images_dir}"
         )
 
-    # The selected directory may be a dataset root, a split directory, an
-    # images directory, or a directory containing images directly. Resolve
-    # the final images/labels pair solely from its filesystem structure.
     images_dir = images_dir.resolve()
     labels_dir = labels_dir.resolve()
 
@@ -1677,11 +1668,6 @@ def annotate_images_with_boxes():
     # HSV colors: ensure colors are distinct regardless of class count.
     import colorsys
 
-    # Automatically choose visually distinct, high-contrast colors.
-    # We deliberately avoid adjacent hues so neighboring classes are not
-    # easily confused. The palette is generated from a large set of
-    # perceptually separated HSV positions and then rotated according to
-    # the class order.
     names = {
         int(class_id): str(class_name)
         for class_id, class_name in names.items()
@@ -1925,7 +1911,7 @@ def annotate_images_with_boxes():
         foreground="#555555",
     ).pack(fill="x", pady=(7, 0))
 
-    # ------------------------- helpers -------------------------
+    # ------------------------- Helpers -------------------------
     def selected_class_id():
         value = class_var.get().split(":", 1)[0].strip()
         try:
@@ -1939,8 +1925,6 @@ def annotate_images_with_boxes():
             )
 
         if class_id not in class_colors:
-            # This should never be needed after normalization, but keep the
-            # GUI fail-safe: every valid class ID must always have a color.
             fallback_index = ordered_ids.index(class_id)
             hue = (fallback_index * 0.61803398875) % 1.0
             rgb = colorsys.hsv_to_rgb(hue, 0.88, 0.95)
@@ -2058,7 +2042,7 @@ def annotate_images_with_boxes():
                 original = im.convert("RGB")
                 original_size = original.size
 
-            # update_idletasks first to ensure canvas dimensions are ready.
+            # Ensure canvas dimensions are ready before drawing.
             root.update_idletasks()
             max_w = max(300, canvas.winfo_width() - 30)
             max_h = max(250, canvas.winfo_height() - 30)
@@ -2087,7 +2071,7 @@ def annotate_images_with_boxes():
                 f"Boxes: {len(state['boxes'])}"
             )
             status_var.set(
-                f"Label: {label if label.is_file() else 'none (will be created on Save)'}"
+                f"Label: {label if label.is_file() else 'none (will be created when saved)'}"
             )
             update_color_indicator()
             draw_all()
@@ -2109,7 +2093,7 @@ def annotate_images_with_boxes():
         image = images[state["index"]]
         label = find_label_for_image(image)
 
-        # Write standard YOLO bboxes only.
+        # Write standard YOLO bounding boxes only.
         lines = []
         for box in state["boxes"]:
             lines.append(
@@ -2126,7 +2110,7 @@ def annotate_images_with_boxes():
             encoding="utf-8",
         )
         state["dirty"] = False
-        status_var.set(f"Saved: {label}")
+        status_var.set(f"Label: {label}")
         image_info_var.set(
             f"{state['index'] + 1}/{len(images)}  |  "
             f"{image.name}  |  {state['original_size'][0]}x{state['original_size'][1]}  |  "
@@ -2162,7 +2146,7 @@ def annotate_images_with_boxes():
             state["index"] = new_index
             load_current()
 
-    # ----------------------- mouse drawing -----------------------
+    # ----------------------- Mouse Drawing -----------------------
     def on_mouse_down(event):
         canvas.focus_set()
 
@@ -2305,7 +2289,7 @@ def annotate_images_with_boxes():
         if state["dirty"]:
             save_current()
         state["closed"] = True
-        root.quit()
+        root.destroy()
 
     def cancel():
         state["closed"] = True
@@ -2335,7 +2319,7 @@ def annotate_images_with_boxes():
             save_current()
             return "break"
         if event.keysym in ("Return", "KP_Enter"):
-            # Enter: save and proceed to next image.
+            # Enter: save & next image.
             if state["index"] < len(images) - 1:
                 save_current()
                 state["index"] += 1
@@ -2401,7 +2385,7 @@ def annotate_images_with_boxes():
             except Exception:
                 pass
 
-    # Debounce resize with Tkinter's after mechanism so we don't reload on every single pixel.
+    # Debounce resize with Tkinter's after mechanism.
     resize_job = {"id": None}
 
     def schedule_resize(event=None):
@@ -2427,19 +2411,342 @@ def annotate_images_with_boxes():
     if state["dirty"]:
         save_current()
 
+    # Properly destroy root window to return cleanly to terminal menus.
+    try:
+        root.destroy()
+    except tk.TclError:
+        pass
+
     print(
         f"Annotation window closed. Processed image folder: {images_dir}\n"
         f"Label folder: {labels_dir}\n"
         f"Class source: {yaml_path}"
     )
 
+
+def delete_selected_image_label_pairs():
+    """Select image-label pairs in a GUI and delete the selected pairs safely."""
+    if tk is None or Image is None or ImageTk is None:
+        raise RuntimeError(
+            "Pillow and Tkinter are required for image selection. "
+            "Installation: python -m pip install Pillow"
+        )
+
+    selected_path = choose_directory(
+        "Select folder containing image-label pairs:",
+        BASE_DIRECTORY,
+    ).resolve()
+
+    # Resolve the selected location to an images root, labels root, and dataset root.
+    if (selected_path / "images").is_dir() and (selected_path / "labels").is_dir():
+        images_root = selected_path / "images"
+        labels_root = selected_path / "labels"
+        base_root = selected_path
+    elif selected_path.name.casefold() == "images":
+        images_root = selected_path
+        labels_root = selected_path.parent / "labels"
+        base_root = selected_path.parent
+    elif (
+        selected_path.parent.name.casefold() == "images"
+        and selected_path.name.casefold() in {"train", "val", "valid", "test"}
+    ):
+        images_root = selected_path.parent
+        labels_root = selected_path.parent.parent / "labels"
+        base_root = selected_path.parent.parent
+    else:
+        raise ValueError(
+            "Select a dataset root, an images folder, or an images/train, "
+            "images/val, images/valid, or images/test folder."
+        )
+
+    if not labels_root.is_dir():
+        raise FileNotFoundError(
+            f"No labels folder was found next to the selected images structure: {labels_root}"
+        )
+
+    # Support both:
+    #   dataset/images/{train,val,test} + dataset/labels/{train,val,test}
+    # and:
+    #   dataset/images + dataset/labels
+    nested_splits = {}
+    for split in SPLITS:
+        candidate_names = [split] if split != "val" else ["val", "valid"]
+        image_split = next(
+            (images_root / name for name in candidate_names if (images_root / name).is_dir()),
+            None,
+        )
+        if image_split is not None:
+            label_split = next(
+                (labels_root / name for name in candidate_names if (labels_root / name).is_dir()),
+                None,
+            )
+            if label_split is None:
+                raise FileNotFoundError(
+                    f"No labels folder was found for split '{split}' under {labels_root}."
+                )
+            nested_splits[split] = (image_split, label_split)
+
+    if nested_splits:
+        selected_split = None
+        if (
+            selected_path.parent.name.casefold() == "images"
+            and selected_path.name.casefold() in {"train", "val", "valid", "test"}
+        ):
+            selected_split = (
+                "val" if selected_path.name.casefold() == "valid"
+                else selected_path.name.casefold()
+            )
+        split_dirs_to_scan = (
+            {selected_split: nested_splits[selected_split]}
+            if selected_split
+            else nested_splits
+        )
+    else:
+        split_dirs_to_scan = {"images": (images_root, labels_root)}
+
+    pairs = []
+    missing_labels = []
+    for split, (images_dir, labels_dir) in split_dirs_to_scan.items():
+        for image in image_files(images_dir):
+            label = labels_dir / f"{image.stem}.txt"
+            if not label.is_file():
+                missing_labels.append((split, image, label))
+            else:
+                pairs.append((split, image, label))
+
+    if missing_labels:
+        print("WARNING: Some images have no matching label. Safe deletion was stopped:")
+        for split, image, label in missing_labels[:30]:
+            print(f"  [{split}] {image} -> {label}")
+        raise RuntimeError("Missing image-label matches were found.")
+
+    if not pairs:
+        raise FileNotFoundError(
+            f"No supported images were found in the selected structure: {images_root}"
+        )
+
+    selected_items = set()
+    state = {"index": 0, "photo": None, "display_size": None, "display_origin": None}
+
+    root = tk.Tk()
+    root.title("YOLO Image - Label Selection")
+    root.geometry("1100x850")
+    root.minsize(850, 650)
+
+    top = ttk.Frame(root, padding=10)
+    top.pack(fill="x")
+    title_var = tk.StringVar()
+    info_var = tk.StringVar()
+    selected_var = tk.StringVar(value="Selected: 0")
+    status_var = tk.StringVar(
+        value="Left/Right: change image | Space: select/deselect | Enter: confirm | Esc: cancel"
+    )
+    ttk.Label(top, textvariable=title_var, font=("TkDefaultFont", 13, "bold")).pack(side="left")
+    ttk.Label(top, textvariable=selected_var).pack(side="right")
+
+    viewer = ttk.Frame(root, padding=(10, 0, 10, 8))
+    viewer.pack(fill="both", expand=True)
+    canvas = tk.Canvas(viewer, background="#202020", highlightthickness=0)
+    canvas.pack(fill="both", expand=True)
+
+    bottom = ttk.Frame(root, padding=10)
+    bottom.pack(fill="x")
+    ttk.Label(bottom, textvariable=info_var).pack(fill="x")
+    ttk.Label(bottom, textvariable=status_var, foreground="#666666").pack(fill="x", pady=(4, 8))
+
+    buttons = ttk.Frame(bottom)
+    buttons.pack(fill="x")
+    select_button = ttk.Button(buttons, text="✓ Select / Deselect")
+    select_button.pack(side="left", fill="x", expand=True, padx=(0, 5))
+    confirm_button = ttk.Button(buttons, text="Confirm Selection")
+    confirm_button.pack(side="left", fill="x", expand=True, padx=5)
+    cancel_button = ttk.Button(buttons, text="Cancel")
+    cancel_button.pack(side="left", fill="x", expand=True, padx=(5, 0))
+
+    def current_pair():
+        return pairs[state["index"]]
+
+    def update_counter():
+        selected_var.set(f"Selected: {len(selected_items)} / {len(pairs)}")
+
+    def render_current():
+        split, image, label = current_pair()
+        try:
+            with Image.open(image) as im:
+                display = im.convert("RGB")
+                display.thumbnail((950, 610), Image.Resampling.LANCZOS)
+                state["photo"] = ImageTk.PhotoImage(display)
+                state["display_size"] = display.size
+        except Exception as exc:
+            canvas.delete("all")
+            canvas.create_text(20, 20, anchor="nw", fill="white", text=f"Could not open image:\n{image}\n\n{exc}")
+            return
+
+        canvas.delete("all")
+        root.update_idletasks()
+        ox = (canvas.winfo_width() - display.width) / 2
+        oy = (canvas.winfo_height() - display.height) / 2
+        state["display_origin"] = (ox, oy)
+        canvas.create_image(ox, oy, image=state["photo"], anchor="nw")
+
+        # Draw existing YOLO boxes when possible.
+        try:
+            lines = label.read_text(encoding="utf-8-sig").splitlines()
+            for raw in lines:
+                parts = raw.split()
+                if len(parts) < 5:
+                    continue
+                try:
+                    _, cx, cy, bw, bh = int(float(parts[0])), *map(float, parts[1:5])
+                except ValueError:
+                    continue
+                x1 = ox + (cx - bw / 2) * display.width
+                y1 = oy + (cy - bh / 2) * display.height
+                x2 = ox + (cx + bw / 2) * display.width
+                y2 = oy + (cy + bh / 2) * display.height
+                canvas.create_rectangle(x1, y1, x2, y2, outline="#ff3030", width=3)
+        except OSError:
+            pass
+
+        title_var.set(f"[{split}] {image.name}")
+        info_var.set(
+            f"{state['index'] + 1}/{len(pairs)}    Label: {label.name}    "
+            f"{'SELECTED' if current_pair() in selected_items else 'not selected'}"
+        )
+        update_counter()
+        canvas.configure(
+            highlightthickness=5 if current_pair() in selected_items else 1,
+            highlightbackground="#35c759" if current_pair() in selected_items else "#666666",
+            highlightcolor="#35c759" if current_pair() in selected_items else "#666666",
+        )
+
+    def toggle_current():
+        pair = current_pair()
+        if pair in selected_items:
+            selected_items.remove(pair)
+        else:
+            selected_items.add(pair)
+        render_current()
+
+    def move(delta):
+        new_index = state["index"] + delta
+        if 0 <= new_index < len(pairs):
+            state["index"] = new_index
+            render_current()
+
+    def confirm_selection():
+        if selected_items:
+            root.quit()
+        else:
+            status_var.set("No images selected.")
+
+    def cancel():
+        selected_items.clear()
+        root.quit()
+
+    select_button.configure(command=toggle_current)
+    confirm_button.configure(command=confirm_selection)
+    cancel_button.configure(command=cancel)
+
+    def on_key(event):
+        if event.keysym == "Left":
+            move(-1)
+        elif event.keysym == "Right":
+            move(1)
+        elif event.keysym == "space":
+            toggle_current()
+        elif event.keysym in ("Return", "KP_Enter"):
+            confirm_selection()
+        elif event.keysym == "Escape":
+            cancel()
+        return "break"
+
+    root.bind_all("<KeyPress-Left>", on_key, add="+")
+    root.bind_all("<KeyPress-Right>", on_key, add="+")
+    root.bind_all("<KeyPress-space>", on_key, add="+")
+    root.bind_all("<KeyPress-Return>", on_key, add="+")
+    root.bind_all("<KeyPress-KP_Enter>", on_key, add="+")
+    root.bind_all("<KeyPress-Escape>", on_key, add="+")
+    canvas.bind("<Button-1>", lambda event: (canvas.focus_set(), toggle_current()))
+    canvas.configure(takefocus=True)
+    root.protocol("WM_DELETE_WINDOW", cancel)
+    render_current()
+    root.mainloop()
+    root.destroy()
+
+    selected_pairs = [pair for pair in pairs if pair in selected_items]
+    if not selected_pairs:
+        print("No images selected. Deletion was not performed.")
+        return
+
+    print("\nImage-label pairs to be deleted:")
+    for split, image, label in selected_pairs:
+        print(f"  [{split}]")
+        print(f"    Image : {image}")
+        print(f"    Label : {label}")
+    print(f"\nTotal pairs to delete: {len(selected_pairs)}")
+
+    if not ask_confirm("The image and label files listed above will be deleted. Confirm?", False):
+        print("Deletion cancelled.")
+        return
+
+    files = [item for _, image, label in selected_pairs for item in (image, label)]
+    default_name = f"{base_root.name}_image_pair_delete_backup"
+    should_save, backup_name = ask_save_backup(
+        "image-label pair deletion",
+        "the selected image and label files",
+        default_name,
+    )
+
+    if should_save:
+        backup = base_root.parent / backup_name
+        if backup.exists() and not ask_confirm(f"{backup} already exists. Overwrite?", False):
+            print("Backup cancelled. Deletion was also cancelled.")
+            return
+        with ZipFile(backup, "w", ZIP_DEFLATED) as archive:
+            show_progress("Backing up selected files", 0, len(files), f"0/{len(files)} files")
+            for index, file in enumerate(files, 1):
+                archive.write(file, file.relative_to(base_root.parent))
+                if index == len(files) or index % max(1, len(files) // 100) == 0:
+                    show_progress(
+                        "Backing up selected files",
+                        index,
+                        len(files),
+                        f"{index}/{len(files)} files",
+                        finish=index == len(files),
+                    )
+        print("Backup file:", backup)
+    else:
+        print("Backup file was not created.")
+
+    show_progress("Deleting image-label pairs", 0, len(selected_pairs), f"0/{len(selected_pairs)} pairs")
+    for index, (_, image, label) in enumerate(selected_pairs, 1):
+        image.unlink()
+        label.unlink()
+        if index == len(selected_pairs) or index % max(1, len(selected_pairs) // 100) == 0:
+            show_progress(
+                "Deleting image-label pairs",
+                index,
+                len(selected_pairs),
+                f"{index}/{len(selected_pairs)} pairs",
+                finish=index == len(selected_pairs),
+            )
+
+    print(f"Deletion completed: {len(selected_pairs)} image-label pairs removed.")
+
+
 def _impl_filter_classes():
     filter_action = ask_select(
         "Class operation:",
         [questionary.Choice("(1) Keep or remove classes", "filter"),
          questionary.Choice("(2) Merge multiple classes into a single class", "merge_classes"),
-         questionary.Choice("(3) Convert all label class IDs to a single value", "force_id")],
+         questionary.Choice("(3) Convert all label class IDs to a single value", "force_id"),
+         questionary.Choice("(4) Remove selected image-label pairs", "delete_pairs")],
     )
+    if filter_action == "delete_pairs":
+        delete_selected_image_label_pairs()
+        return
+
     root = choose_one_dataset("Dataset whose classes will be filtered:")
     repair_missing_pairs(root)
     data, names, yaml_path = load_yaml(root, required=filter_action != "force_id")
@@ -2485,7 +2792,6 @@ def validate_new_dataset_name(name):
     return name
 
 
-
 def is_flat_images_labels_dataset(root):
     """Returns True if source has no train/val/test, only images + labels."""
     if not root.is_dir():
@@ -2525,18 +2831,10 @@ def choose_flat_destination_layout():
     )
 
 
-
 def choose_merge_sources(message):
     """
     Allows selecting both dataset root and a single split folder
     (train/val/valid/test) as source for merge.
-
-    IMPORTANT:
-      When a folder like dataset/train or dataset/valid is selected,
-      having images + labels inside it designates it as a SPLIT.
-      looks_like_dataset() check is NOT performed first; otherwise train/val/valid/test
-      folder could mistakenly be assumed as dataset root and new train/val/test
-      folders could be created inside it by split_dirs(..., create=True).
     """
     selected = []
     while True:
@@ -2599,7 +2897,6 @@ def choose_merge_sources(message):
 
         if not ask_confirm("Add another source folder to this group?", False):
             return selected
-
 
 
 def manifest_selected_split_without_yaml(root, split):
@@ -2696,20 +2993,9 @@ def manifest_selected_split(root, split):
     return result
 
 
-
 def resolve_images_labels_target(selected_path):
     """
     Resolve exactly the user's selected target.
-
-    Cases:
-      A) selected_path == .../images and sibling .../labels exists:
-         images -> selected_path, labels -> sibling labels.
-      B) selected_path contains images/ and labels/:
-         images -> selected_path/images, labels -> selected_path/labels.
-      C) selected_path is train/val/valid/test and contains images/labels:
-         images -> selected_path/images, labels -> selected_path/labels.
-      D) selected_path is empty/other:
-         return None; caller may use the normal dataset workflow.
 
     IMPORTANT: this function NEVER creates train/val/test.
     """
@@ -2749,7 +3035,6 @@ def resolve_images_labels_target(selected_path):
     return None
 
 
-
 def _impl_merge_datasets():
     sources = choose_merge_sources(
         "Select SOURCE folder/split to copy into main dataset:"
@@ -2761,8 +3046,6 @@ def _impl_merge_datasets():
     source_info = []
     for source, selected_split in sources:
         # If only train/val/valid/test is selected, allow continuing without data.yaml.
-        # Since class ID mapping cannot be performed, source class names are accepted
-        # as empty in this case and target selection proceeds.
         if selected_split is not None:
             yaml_path = source / DATA_YAML_NAME
             if not yaml_path.is_file():
@@ -2783,14 +3066,10 @@ def _impl_merge_datasets():
         # If entire dataset root is selected, data.yaml is mandatory.
         if selected_split is None:
             repair_missing_pairs(source)
-        # If selected_split != None, new train/val/test folders will NEVER
-        # be created in source folder.
 
         try:
             _, source_names, _ = load_yaml(source)
         except ValueError as exc:
-            # If data.yaml exists but names/class list is empty or invalid,
-            # give user chance to continue only when single split is selected.
             if selected_split is None:
                 raise
 
@@ -2833,7 +3112,6 @@ def _impl_merge_datasets():
         )
 
         # FIRST: resolve user selection with images+labels logic.
-        # train/val/test is NOT CREATED in this block.
         direct_target = resolve_images_labels_target(destination)
 
         if direct_target is not None:
@@ -2858,8 +3136,6 @@ def _impl_merge_datasets():
                 "train/val/test folders will NOT BE CREATED inside this destination."
             )
 
-            # In flat/direct destinations, split_dirs and repair_missing_pairs
-            # are strictly not used. Only selected images/labels pair is used.
             destination_yaml = direct_target["root"] / DATA_YAML_NAME
             yaml_exists = destination_yaml.is_file()
 
@@ -2874,8 +3150,6 @@ def _impl_merge_datasets():
                     False,
                 )
             else:
-                # If existing image/label pairs exist at destination, do not use manifest();
-                # that function may assume split structure. Scan folders directly.
                 existing_images = image_files(destination_images)
                 existing_labels = list(destination_labels.glob("*.txt"))
                 if existing_images or existing_labels:
@@ -2888,16 +3162,12 @@ def _impl_merge_datasets():
                 rebuild_destination_yaml = True
 
         else:
-            # Reached only when user selects a real dataset root / normal target.
-            # Flat/split target is not modified.
             flat_destination_mode = None
 
             destination_data, destination_names, destination_yaml = load_yaml(
                 destination, required=False
             )
 
-            # Missing split structure can be created here in a normal target.
-            # This NEVER runs for single images/labels selection.
             required_paths = [
                 destination / split / kind
                 for split in SPLITS for kind in ("images", "labels")
@@ -2928,7 +3198,6 @@ def _impl_merge_datasets():
                     "selected source data.yaml files."
                 )
 
-
     mode_choices = [questionary.Choice(
         "Match by data.yaml names; append new ones to end (recommended)", "names")]
     if not destination_is_new and not rebuild_destination_yaml:
@@ -2949,9 +3218,6 @@ def _impl_merge_datasets():
         source_key = (source, selected_split)
         if mode == "names":
             if not source_names:
-                # Class names are unknown in single-split source without data.yaml.
-                # In this case, copying label IDs as-is is the only safe behavior;
-                # used if relevant IDs already exist in target YAML.
                 if output_names:
                     max_source_id = max(
                         (cid for pair in source_pairs for cid in pair.class_ids),
@@ -3061,7 +3327,6 @@ def _impl_merge_datasets():
             f"{remapped_existing}"
         )
 
-    # In direct images/labels destination, split directories are not created.
     if not destination_is_new and flat_destination_mode == "direct":
         dirs = None
     elif destination_is_new:
@@ -3087,7 +3352,6 @@ def _impl_merge_datasets():
                 }
             else:
                 target = dirs[pair.source_split]
-
 
             stem, changed = unique_stem(
                 pair.image.stem,
@@ -3124,12 +3388,9 @@ def _impl_merge_datasets():
     if output_names:
         write_yaml(destination_yaml, destination_data, output_names)
     else:
-        # If class names are unknown, continue without YAML instead of creating
-        # empty/erroneous data.yaml. User already approved this situation earlier.
         print("Class names unknown; empty data.yaml will not be created.")
 
     if not destination_is_new and flat_destination_mode == "direct":
-        # Validate directly selected images/labels target.
         validate_flat_dataset(
             direct_target["root"],
             False,
@@ -3387,12 +3648,12 @@ def _impl_convert_to_zip_layout():
             return
         with ZipFile(yaml_backup, "w", ZIP_DEFLATED) as archive:
             archive.write(yaml_path, yaml_path.relative_to(root))
-        print("data.yaml save file:", yaml_backup)
+        print("data.yaml backup file:", yaml_backup)
     else:
         yaml_backup = None
-        print("data.yaml save file was not created.")
+        print("data.yaml backup file was not created.")
 
-    # Generate the unique temporary-directory suffix before using it.
+    # Generate temporary directory suffix.
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     temp = root / f"_layout_conversion_temp_{stamp}"
     if temp.exists():
@@ -3418,7 +3679,6 @@ def _impl_convert_to_zip_layout():
     output["test"] = "images/test"
     output.pop("path", None)
     write_yaml(yaml_path, output, names)
-    # write_yaml writes working layout; finalize package paths one last time.
     output = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
     output["train"], output["val"], output["test"] = (
         "images/train", "images/val", "images/test"
@@ -3498,8 +3758,7 @@ def _impl_create_dataset_zip():
         return
 
     try:
-        # ZIP64 supports large datasets. Low compression level compresses txt/yaml files
-        # without wasting unnecessary CPU on JPG/PNG.
+        # ZIP64 supports large datasets.
         with ZipFile(
             temporary, "w", ZIP_DEFLATED, allowZip64=True, compresslevel=1
         ) as archive:
@@ -3529,7 +3788,6 @@ def _impl_create_dataset_zip():
                         f"{processed_bytes / (1024**3):.2f}/{total_bytes / (1024**3):.2f} GB",
                         finish=index == len(files),
                     )
-        # First close temporary ZIP completely; then rename to original in a single step.
         temporary.replace(output)
     except Exception:
         if temporary.exists():
@@ -3552,7 +3810,6 @@ def create_dataset_zip():
         return _impl_create_dataset_zip()
     except BackMenu:
         return None
-
 
 
 def validate_flat_dataset(root, interactive=True, require_yaml=False):
@@ -3622,9 +3879,6 @@ def validate_dataset(root, interactive=True, require_yaml=False):
     root = Path(root).resolve()
 
     if interactive:
-        # Do not create directories while validating. Repairing missing
-        # image/label pairs is a separate operation and must never turn an
-        # invalid layout into an apparently valid empty dataset.
         pass
 
     layout_paths = validation_split_dirs(root)
@@ -3970,9 +4224,9 @@ def _impl_create_empty_labels_for_images():
                             "Saving existing labels", index, len(existing_labels),
                             f"{index}/{len(existing_labels)}", finish=index == len(existing_labels),
                         )
-            print("Existing labels save file:", backup)
+            print("Existing labels backup file:", backup)
         else:
-            print("Existing labels save file was not created.")
+            print("Existing labels backup file was not created.")
 
     labels_dir.mkdir(parents=True, exist_ok=True)
     show_progress("Creating empty labels", 0, len(images), f"0/{len(images)} labels")
@@ -4018,17 +4272,9 @@ def main():
 
         while True:
             # Level 2: Linux distribution selection
-            #
-            # configure_platform() normally already selected the distro.
-            # If Linux was selected, keep that distro as the parent menu state.
-            #
-            # To make Back from the main menu return to the distro menu,
-            # we recreate the distro selection here only when the user backs
-            # out of the main menu.
             try:
                 ensure_structure_confirmation()
             except BackMenu:
-                # Confirmation cancellation returns to the distro/OS level.
                 if SELECTED_OS == "linux":
                     try:
                         SELECTED_LINUX_DISTRO = ask_select(
@@ -4070,7 +4316,6 @@ def main():
             except BackMenu:
                 # Main menu -> previous menu.
                 if SELECTED_OS == "linux":
-                    # Linux: go back to the distribution menu.
                     try:
                         SELECTED_LINUX_DISTRO = ask_select(
                             "Your Linux distribution:",
@@ -4080,14 +4325,10 @@ def main():
                         )
                         continue
                     except BackMenu:
-                        # Distribution menu -> Windows/Linux menu.
                         break
                 else:
-                    # Windows has no distribution menu.
                     break
 
-        # Returned from Linux distribution menu or Windows main menu.
-        # Loop back to the Windows/Linux selection menu.
         continue
 
 
