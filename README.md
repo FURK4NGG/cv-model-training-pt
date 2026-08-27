@@ -1,8 +1,3 @@
-<!-- Proje-Resmi -->
-<!-- ne kadar fotograf olmali, dosyalar nerede olmali zip icerisinde , zip i atma, ipynb deki bagimliliklari kendinden cek  vs  -->
-<!-- kodun tr en olmasi olabilir-->
-<!-- colab koduna collabda ac baglantisi koy-->
-
 ## 👀 cv-model-training-pt Overview  1/3  
 <h1 align="center">Computer Vision AI model training for rasberry pi 5 and interactive command-line application for filtering, merging, splitting, validating, reorganizing, and packaging YOLO datasets</h1>  
 
