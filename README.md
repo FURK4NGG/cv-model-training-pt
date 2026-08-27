@@ -10,9 +10,9 @@
 
 ![Demo cv-model-training-pt Image](https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-3.webp)
 
-<p align="center"><img src="https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-4.gif" alt="Demo cv-model-training-pt GIF" style="max-width: 100%; height: auto;></p>
+<p align="center"><img src="https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-4.gif" alt="Demo cv-model-training-pt GIF" style="max-width: 100%; height: auto;"></p>
 
-<p align="center"><img src="https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-5.gif" alt="Demo cv-model-training-pt GIF" style="max-width: 100%; height: auto;></p>
+<p align="center"><img src="https://github.com/FURK4NGG/cv-model-training-pt/blob/main/%7B%7D/cv-model-training-pt-5.gif" alt="Demo cv-model-training-pt GIF" style="max-width: 100%; height: auto;"></p>
 
 
 ## 🚀 Features
